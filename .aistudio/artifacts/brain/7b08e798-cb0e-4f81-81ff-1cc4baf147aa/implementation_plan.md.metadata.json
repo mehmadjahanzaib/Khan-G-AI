@@ -1,0 +1,6 @@
+{
+  "summary":  "Revised implementation plan for the Khan G AI — Khan G Tools Unified AI Tool Ecosystem incorporating the khan-g-tools-brief.md. Categorizes all ~100 tools into Server-Reused APIs, Engine-Ported tools, and 'Not Yet AI-Callable' tools with reasons. Strictly scopes execution to Phase 1 first (Registry, Workflow Runner, and Verified Tools), enforces usage limits, and guarantees zero exposure of admin routes and environment secrets.",
+  "updatedAt":  "2026-10-02T15:49:21.621738302Z",
+  "requestFeedback":  true,
+  "userFacing":  true
+}

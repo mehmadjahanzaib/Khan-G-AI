@@ -1,6 +1,6 @@
 {
   "name": "Khan G Tools",
-  "description": "One Chat. Every File Tool. AI-chatbot-driven file processing hub to resize, convert, compress, merge, split, and transform files through natural conversation.",
-  "requestFramePermissions": [],
+  "description": "Khan G AI — Your AI Assistant for Work, Study & Everyday Life. Developed by Muhammad Jahanzaib (MJ).",
+  "requestFramePermissions": ["microphone"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

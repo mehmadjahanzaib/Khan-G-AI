@@ -71,8 +71,8 @@ function resolveIntentFallback(userText: string, files?: { name: string; type: s
     return {
       type: 'message',
       text: lower.includes('tum') || lower.includes('aap')
-        ? 'Main Khan G Tools hoon — aap ka AI file assistant! Main images, PDFs, Word documents, Excel spreadsheets aur Zip archives ko process, convert aur optimize karne mein aap ki madad kar sakta hoon.'
-        : "I'm Khan G Tools, your AI-powered file assistant. I can help you process images, PDFs, documents, spreadsheets, and archives.",
+        ? 'Main Khan G AI hoon — aap ka AI file assistant! Main images, PDFs, Word documents, Excel spreadsheets aur Zip archives ko process, convert aur optimize karne mein aap ki madad kar sakta hoon.'
+        : "I'm Khan G AI, your AI-powered file assistant. I can help you process images, PDFs, documents, spreadsheets, and archives.",
       provider: 'built-in'
     };
   }
@@ -93,7 +93,7 @@ function resolveIntentFallback(userText: string, files?: { name: string; type: s
     if (isUrdu) {
       return {
         type: 'message',
-        text: `Main Khan G Tools hoon! Main aap ki files ke sath yeh tamaam kaam kar sakta hoon:
+        text: `Main Khan G AI hoon! Main aap ki files ke sath yeh tamaam kaam kar sakta hoon:
 
 🖼️ **Images**:
 - Resize karna (maslan: "is image ko 800x600 mein resize karo" ya 50%)
@@ -124,7 +124,7 @@ Bas paperclip icon se apni file upload karein aur batayein ke aap kya karna chah
 
     return {
       type: 'message',
-      text: `Hello! I am Khan G Tools, your AI file processing assistant. Here is everything I can do for you:
+      text: `Hello! I am Khan G AI, your AI file processing assistant. Here is everything I can do for you:
 
 🖼️ **Image Tools**:
 - **Resize**: Exact dimensions (e.g., "resize to 800x600") or percentage (e.g., "make it 50%")
@@ -158,13 +158,13 @@ Just click the paperclip icon to upload a file and type your instruction!`,
     if (lower.includes('salam') || lower.includes('aoa') || lower.includes('kese') || lower.includes('haal')) {
       return {
         type: 'message',
-        text: 'Walaikum Assalam! Khan G Tools mein khush amdeed. Main aap ki file conversions aur editing mein kis tarah madad kar sakta hoon?',
+        text: 'Walaikum Assalam! Khan G AI mein khush amdeed. Main aap ki file conversions aur editing mein kis tarah madad kar sakta hoon?',
         provider: 'built-in'
       };
     }
     return {
       type: 'message',
-      text: 'Hello! Welcome to Khan G Tools. How can I help you today?',
+      text: 'Hello! Welcome to Khan G AI. How can I help you today?',
       provider: 'built-in'
     };
   }
@@ -206,12 +206,52 @@ Just click the paperclip icon to upload a file and type your instruction!`,
   ) {
     return {
       type: 'message',
-      text: "Khan G Tools specializes in processing Images, PDFs, Word documents, Excel sheets, and Zip archives. Currently video and audio editing are not supported, but please feel free to upload any document or image!",
+      text: "Khan G AI specializes in processing Images, PDFs, Word documents, Excel sheets, and Zip archives. Currently video and audio editing are not supported, but please feel free to upload any document or image!",
       provider: 'built-in'
     };
   }
 
-  // 6. Check if user is asking for a file operation WITHOUT uploading a file
+  // 6. Check for non-file utility tools (QR generator, Password generator, Tax calculator)
+  if (lower.includes('qr') && (lower.includes('generate') || lower.includes('create') || lower.includes('banao') || lower.includes('make') || lower.includes('code') || lower.includes('http'))) {
+    const urlMatch = text.match(/https?:\/\/[^\s]+/i);
+    const targetText = urlMatch ? urlMatch[0] : (text.replace(/(generate|make|create|qr|code|for|banao|ka)/gi, '').trim() || 'https://khang.pk');
+    return {
+      type: 'tool_call',
+      name: 'qr-code-generator',
+      args: { text: targetText, size: 400 },
+      provider: 'built-in-intent'
+    };
+  }
+
+  if (lower.includes('password') && (lower.includes('generate') || lower.includes('create') || lower.includes('make') || lower.includes('strong') || lower.includes('banao'))) {
+    const lenMatch = lower.match(/(\d+)\s*(?:char|digit|length)/i);
+    const length = lenMatch ? parseInt(lenMatch[1], 10) : 16;
+    return {
+      type: 'tool_call',
+      name: 'password-generator',
+      args: { length },
+      provider: 'built-in-intent'
+    };
+  }
+
+  if (lower.includes('gst') || (lower.includes('tax') && (lower.includes('calculate') || lower.includes('rate') || lower.includes('hisaab')))) {
+    const numMatch = lower.match(/(\d+)/);
+    const rateMatch = lower.match(/(\d+)\s*%/);
+    if (numMatch) {
+      return {
+        type: 'tool_call',
+        name: 'gst-tax-calculator',
+        args: {
+          amount: parseInt(numMatch[1], 10),
+          ratePercent: rateMatch ? parseInt(rateMatch[1], 10) : 18,
+          isInclusive: lower.includes('inclusive')
+        },
+        provider: 'built-in-intent'
+      };
+    }
+  }
+
+  // 7. Check if user is asking for a file operation WITHOUT uploading a file
   const wantsFileOp =
     lower.includes('resize') ||
     lower.includes('compress') ||
@@ -253,8 +293,24 @@ Just click the paperclip icon to upload a file and type your instruction!`,
   }
 
   // =========================================================================
-  // FILE OPERATIONS (When files ARE attached)
+  // MULTI-STEP WORKFLOWS & FILE OPERATIONS (When files ARE attached)
   // =========================================================================
+
+  // Multi-step Workflow: Passport Photo -> A4 Sheet -> PDF
+  if (hasFiles && (lower.includes('passport') || lower.includes('id photo')) && (lower.includes('sheet') || lower.includes('a4') || lower.includes('pdf') || lower.includes('print') || lower.includes('6') || lower.includes('4') || lower.includes('8') || lower.includes('multiple'))) {
+    const countMatch = lower.match(/(\d+)\s*(?:photo|copy|copies|tasweer)/i);
+    const count = countMatch ? parseInt(countMatch[1], 10) : 6;
+    return {
+      type: 'workflow_plan',
+      workflowSteps: [
+        { toolId: 'passport-photo-maker', args: { standard: '2x2_inch', backgroundColor: 'white' }, title: '1. Crop & Frame to 2×2 Inch Passport Photo' },
+        { toolId: 'photo-sheet-maker', args: { count, pageSize: 'A4' }, title: `2. Tile ${count} Photos onto A4 Sheet with Cut Borders` },
+        { toolId: 'image-to-pdf', args: { orientation: 'portrait' }, title: '3. Convert Print Sheet to High-Resolution PDF' }
+      ],
+      text: `I have analyzed your goal to prepare passport photos for printing. Here is the suggested 3-step workflow:\n\n1. **Passport Photo Maker**: Crop and center subject to standard 2×2 inch photo framing.\n2. **Photo Sheet Maker**: Arrange ${count} copies on a standard A4 sheet with border cutting lines.\n3. **Image to PDF**: Convert the sheet into a print-ready PDF document.\n\nPlease confirm below to execute this workflow.`,
+      provider: 'Khan G Workflow Orchestrator'
+    };
+  }
 
   // 1. Resize Image (supports Roman Urdu: "is image ko 800x600 mein resize karo")
   const dimMatch = lower.match(/(\d+)\s*(?:x|\*|by)\s*(\d+)/i);
@@ -452,12 +508,85 @@ Just click the paperclip icon to upload a file and type your instruction!`,
     };
   }
 
-  // Clarifying question for attached file
+  // 17. Exam & Academic queries when offline or built-in
+  if (
+    lower.includes('mdcat') ||
+    lower.includes('ecat') ||
+    lower.includes('css') ||
+    lower.includes('pms') ||
+    lower.includes('fsc') ||
+    lower.includes('matric') ||
+    lower.includes('exam') ||
+    lower.includes('study') ||
+    lower.includes('past paper') ||
+    lower.includes('biology') ||
+    lower.includes('physics') ||
+    lower.includes('chemistry') ||
+    lower.includes('math') ||
+    lower.includes('formula') ||
+    lower.includes('mcq')
+  ) {
+    return {
+      type: 'message',
+      text: `### 🎓 Khan G AI — Exam & Academic Assistance
+
+Hello! As your academic tutor, here is guidance for your study and preparation:
+
+1. **Concept Mastery & High-Yield Topics**:
+   - Focus on core fundamental concepts, repeated board / entry test patterns, and textbook definitions.
+   - For **MDCAT / Pre-Medical**: Prioritize Cell Biology, Genetics, Human Physiology, Organic Reaction Mechanisms, and Physics Mechanics.
+   - For **ECAT / Engineering**: Master Calculus, Conics, Vectors, Electrostatics, and Equilibrium.
+   - For **CSS / PMS**: Focus on structured outline creation, analytical thesis statements, and updated factual data.
+
+2. **Effective Preparation Formula**:
+   - **Active Recall**: Test yourself with MCQs and past papers instead of passive re-reading.
+   - **Error Notebook**: Write down every question you get wrong and review the concept weekly.
+   - **Timed Drills**: Practice answering with strict exam time limits.
+
+> 💡 **Exam Tip:** Ask me any specific topic, theorem, numerical problem, or past-paper question, and I will break it down for you step-by-step!`,
+      provider: 'Khan G Academic Engine'
+    };
+  }
+
+  // Greetings when no files are uploaded
+  if (
+    lower.includes('salam') ||
+    lower.includes('aoa') ||
+    lower.includes('hello') ||
+    lower.includes('hi') ||
+    lower.includes('hey') ||
+    lower.includes('kese ho') ||
+    lower.includes('how are you')
+  ) {
+    return {
+      type: 'message',
+      text: lower.includes('salam') || lower.includes('aoa') || lower.includes('kese')
+        ? 'Walaikum Assalam! Main Khan G AI hoon — aap ka AI Chatbot, Exam Prep Partner aur File Transformation Assistant. Main aap ke exams ki tayyari, parhai, aur files process karne mein kya madad kar sakta hoon?'
+        : 'Hello! I am Khan G AI, your universal AI Chatbot & Exam Preparation Assistant. How can I help you with your studies, questions, or files today?',
+      provider: 'built-in'
+    };
+  }
+
+  // If files are attached but ambiguous operation
+  if (hasFiles && files && files.length > 0) {
+    return {
+      type: 'message',
+      text: `I received your file "${files[0].name}", but could you please clarify what operation you'd like to perform? For example: "resize to 800x600", "compress", "convert to PDF", "extract text", or "convert to Excel"?`,
+      provider: 'built-in',
+      isClarification: true
+    };
+  }
+
+  // General conversational response
   return {
     type: 'message',
-    text: `I received your file "${files[0].name}", but could you please clarify what operation you'd like to perform? For example: "resize to 800x600", "compress", "convert to PDF", "extract text", or "convert to Excel"?`,
-    provider: 'built-in',
-    isClarification: true
+    text: `I am Khan G AI, developed by Muhammad Jahanzaib (MJ) 🇵🇰. You can chat with me freely for:
+- 📚 **Exam Preparation**: Matric, FSc, MDCAT, ECAT, CSS, A/O Levels past papers and notes.
+- 💬 **General Chat & Problem Solving**: Math formulas, essay outlines, coding help, and explanations.
+- 📁 **21+ File Tools**: Attach images, PDFs, Excel sheets, or Word docs anytime to convert, resize, or extract text.
+
+How can I assist you right now?`,
+    provider: 'built-in'
   };
 }
 
@@ -476,36 +605,49 @@ export async function callAI(
   const preferredProvider = (process.env.AI_PROVIDER || 'gemini').toLowerCase().trim();
   const lastUserMessage = [...messages].reverse().find((m) => m.role === 'user')?.content || '';
 
-  const systemPrompt = `You are Khan G Tools AI, a polite, conversational AI file assistant similar to ChatGPT, with the tagline: "One Chat. Every File Tool."
-You understand English, Urdu, and Roman Urdu fluently.
-Attached uploaded files: ${JSON.stringify(options?.uploadedFiles || [])}
+  const systemPrompt = `You are Khan G AI, an elite, ultra-fast AI Chatbot, Academic Exam Tutor, and File Transformation Assistant developed by Muhammad Jahanzaib (MJ) from Pakistan 🇵🇰.
+Official Tagline: "Your AI Assistant for Work, Study & Everyday Life."
 
-BEHAVIOR RULES:
-1. CONVERSATIONAL REQUESTS (Normal chat):
-   - If the user greets you ("Hello", "Hi", "Salam", "Aoa"), respond warmly: "Hello! Welcome to Khan G Tools. How can I help you today?" (or in Urdu/Roman Urdu if addressed in it).
-   - If the user asks "Who are you?" or "Tum kon ho?", answer: "I’m Khan G Tools, your AI-powered file assistant. I can help you process images, PDFs, documents, spreadsheets, and archives."
-   - If the user asks "What can you do?" or "Tum kya kya kar sakte ho?", explain all available tools (Images, PDFs, Word, Excel, CSV, OCR, Zip) in a friendly, structured, and simple way.
-   - If the user says "Thank you" or "Shukriya", respond politely and warmly.
-   - For any general or informational conversation, return a normal assistant message. Respond in the same language (English, Urdu, or Roman Urdu) the user used.
+1. EXAM PREPARATION & ACADEMIC EXCELLENCE:
+   - Matric & Inter / FSc (Part 1 & 2: Pre-Medical, Pre-Engineering, ICS, I.Com), O/A Levels.
+   - Competitive Entry Tests: MDCAT (Biology, Chemistry, Physics, English, Logical Reasoning), ECAT, NUST NET, FAST, GIKI, PIEAS, LAT, GAT, SAT, GRE.
+   - Civil Services & Competitive Exams: CSS & PMS (Pakistan Affairs, Current Affairs, Essay Writing, Islamiat, International Relations).
+   - University & STEM: Computer Science (Python, C++, Java, JS, Web Dev, Algorithms), Calculus, Linear Algebra, Organic Chemistry, Mechanics, Economics.
+   - Teaching Methodology: Break complex concepts into intuitive analogies, provide step-by-step derivations, past-paper question formats, memory mnemonics, and high-yield study summaries.
+   - Study Encouragement: End study or revision answers with a brief, genuine note of encouragement (e.g. "Stay consistent with your practice — you're making steady progress!"). Keep it natural, not repetitive or generic.
+   - Academic Integrity & Trust: NEVER claim a topic is 100% guaranteed to appear in an exam, and never guarantee a pass/fail outcome or specific exam score.
+   - Formatting style: Use crisp headings (###), bold key terms, numbered steps, code blocks with syntax tags, and executive callouts like:
+     > 💡 **Exam Tip:** High-yield concept frequently tested in board & entry tests.
+     > ⚠️ **Common Mistake:** Avoid confusing X with Y.
 
-2. FILE OPERATIONS & TOOL CALLING:
-   - ONLY call a tool function when:
-     (a) There is at least ONE uploaded file present in the "Attached uploaded files" list above, AND
-     (b) The user explicitly requested a supported file operation (resize, compress, convert, merge, split, pdf to word, excel, ocr, zip, unzip).
-   - If the user asks for a file operation BUT NO files are uploaded, DO NOT CALL ANY TOOL. Instead respond naturally:
-     "Please upload the file you want me to process, and tell me what you would like me to do with it." (or in Roman Urdu: "Barahe meherbani woh file upload karein jise aap process karna chahte hain, aur mujhe batayein ke aap is ke sath kya karna chahte hain.")
-   - NEVER pretend that a file was processed if no actual backend operation was completed.
-   - If a file is uploaded but the instruction is ambiguous, ask a concise clarification question instead of guessing.
-   - If the user asks for background removal, explain that Background Removal is currently in development (Coming Soon in our Pro Suite), and suggest supported image operations like resizing, format conversion, or compression.
-   - If the request is unsupported (e.g. video, audio editing), explain what Khan G Tools supports.`;
+2. CONVERSATIONAL & GENERAL INTELLIGENCE:
+   - Provide articulate, knowledgeable, friendly, and respectful answers on any topic.
+   - Flawlessly speak and respond in the language the user addresses you in: English, Urdu script, or natural Roman Urdu.
+   - If asked who made you or who your developer is, proudly identify: "I was developed by Muhammad Jahanzaib (MJ), a software engineer and AI builder from Pakistan 🇵🇰."
+   - Upgrades & Payments (SECURITY RULE): Never recite raw personal bank account numbers, IBAN, or JazzCash account credentials in conversational text. Instead, direct the user to click the "Upgrade to Pro" button in the app header or settings, where secure activation methods and official options are displayed. For direct support, you may mention developer WhatsApp (+92 333-5016770).
+   - Referral Program: If a user asks how to get Pro for free or earn bonus days, explain that they can use Khan G AI's "Refer & Earn" program in Settings/Profile to share their unique link — both they and their friends earn 3 bonus days of Pro!
+   - Upsell Guidance: When a user uploads large documents or frequently uses file tools in a session, you may politely mention once that Khan G Pro offers higher limits and 100MB file processing.
+   - Accuracy & Uncertainty: Khan G AI can make mistakes. If information cannot be verified, state clearly: "I don't have enough reliable information to answer that confidently." Never hallucinate facts.
 
-  // Check for direct high-confidence tool intent when files are attached
+3. 21+ FILE PROCESSING & TRANSFORMATION TOOLS:
+   - Attached files: ${JSON.stringify(options?.uploadedFiles || [])}
+   - When the user asks to process an uploaded file, call the appropriate tool with accurate parameters.
+   - ONLY call a tool if at least one file is uploaded. If no file is attached and the user asks to edit/convert a file, explain politely that they can attach the file using the paperclip button.
+   - Never hallucinate file results if an operation was not executed.`;
+
+  // Check for direct high-confidence tool intent, workflow plans, or standalone tools
   const directIntent = resolveIntentFallback(lastUserMessage, options?.uploadedFiles);
-  if (directIntent.type === 'tool_call' && options?.uploadedFiles && options.uploadedFiles.length > 0) {
+  if (directIntent.type === 'workflow_plan') {
     return directIntent;
   }
+  if (directIntent.type === 'tool_call') {
+    const isNoUploadTool = ['qr-code-generator', 'password-generator', 'gst-tax-calculator', 'invoice-maker', 'receipt-maker'].includes(directIntent.name || '');
+    if (isNoUploadTool || (options?.uploadedFiles && options.uploadedFiles.length > 0)) {
+      return directIntent;
+    }
+  }
 
-  // 1. Google AI Studio (Gemini) - Primary provider
+  // 1. Google AI Studio (Gemini 3.8 Flash) - Primary provider
   if (preferredProvider === 'gemini' && Date.now() > geminiPermissionDeniedUntil) {
     const apiKey = process.env.GEMINI_API_KEY;
     if (apiKey && apiKey !== 'MY_GEMINI_API_KEY') {
@@ -529,7 +671,7 @@ BEHAVIOR RULES:
           contents,
           config: {
             tools: genAITools,
-            temperature: 0.2,
+            temperature: 0.3,
           },
         });
 
@@ -554,16 +696,14 @@ BEHAVIOR RULES:
         }
       } catch (err: any) {
         const errMsg = err?.message || '';
-        // If permission denied or project blocked, back off to avoid spamming the endpoint
         if (errMsg.includes('PERMISSION_DENIED') || errMsg.includes('403') || err?.status === 403) {
-          geminiPermissionDeniedUntil = Date.now() + 10 * 60 * 1000;
+          geminiPermissionDeniedUntil = Date.now() + 24 * 60 * 60 * 1000;
         }
-        // Seamless failover to secondary provider without triggering unhandled console error alarms
       }
     }
   }
 
-  // 2. Groq Provider (Fast secondary fallback or direct provider)
+  // 2. Groq Provider (Ultra-fast latency, sub-second responses, GPT-OSS 20B/120B)
   if (process.env.GROQ_API_KEY) {
     try {
       const groq = new OpenAI({
@@ -571,8 +711,10 @@ BEHAVIOR RULES:
         baseURL: 'https://api.groq.com/openai/v1',
       });
 
+      const fastModel = process.env.GROQ_MODEL || 'openai/gpt-oss-20b';
+
       const response = await groq.chat.completions.create({
-        model: 'openai/gpt-oss-120b',
+        model: fastModel,
         messages: [
           { role: 'system', content: systemPrompt },
           ...messages.map((m) => ({ role: m.role, content: m.content })),
@@ -586,7 +728,8 @@ BEHAVIOR RULES:
           },
         })),
         tool_choice: 'auto',
-        max_tokens: 600,
+        max_tokens: 2048,
+        temperature: 0.4,
       });
 
       const message = response.choices[0]?.message;
@@ -604,7 +747,7 @@ BEHAVIOR RULES:
           type: 'tool_call',
           name: toolCall?.function?.name || 'unknown_tool',
           args,
-          provider: 'Groq Cloud (GPT-OSS 120B)',
+          provider: 'Groq Cloud (Fast AI)',
         };
       }
 
@@ -612,11 +755,33 @@ BEHAVIOR RULES:
         return {
           type: 'message',
           text: message.content.trim(),
-          provider: 'Groq Cloud (GPT-OSS 120B)',
+          provider: 'Groq Cloud (Fast AI)',
         };
       }
-    } catch {
-      // Continue to next fallback
+    } catch (groqErr) {
+      // Fallback if model error: try openai/gpt-oss-120b or qwen/qwen3.8-27b
+      try {
+        const groq = new OpenAI({
+          apiKey: process.env.GROQ_API_KEY,
+          baseURL: 'https://api.groq.com/openai/v1',
+        });
+        const retryResp = await groq.chat.completions.create({
+          model: 'openai/gpt-oss-120b',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            ...messages.map((m) => ({ role: m.role, content: m.content })),
+          ],
+          max_tokens: 2048,
+        });
+        const text = retryResp.choices[0]?.message?.content;
+        if (text) {
+          return {
+            type: 'message',
+            text: text.trim(),
+            provider: 'Groq Cloud (Fast AI)',
+          };
+        }
+      } catch {}
     }
   }
 
@@ -634,26 +799,202 @@ BEHAVIOR RULES:
           { role: 'system', content: systemPrompt },
           ...messages.map((m) => ({ role: m.role, content: m.content })),
         ],
-        max_tokens: 400,
+        max_tokens: 1024,
       });
 
       const content = response.choices[0]?.message?.content;
       if (content && content.trim().length > 0) {
-        // Guard against hallucinated raw tool tokens from small open models
-        if (content.includes('<|tool_call') || content.includes('<tool_call') || content.includes('[read_file(') || content.includes('[tool_call(')) {
-          return resolveIntentFallback(lastUserMessage, options?.uploadedFiles);
+        if (!content.includes('<|tool_call') && !content.includes('[tool_call(')) {
+          return {
+            type: 'message',
+            text: content.trim(),
+            provider: 'OpenRouter AI',
+          };
         }
-        return {
-          type: 'message',
-          text: content.trim(),
-          provider: 'OpenRouter',
-        };
       }
-    } catch {
-      // Continue to next fallback
+    } catch {}
+  }
+
+  // 4. Built-in intelligent rule-based intent resolver
+  return resolveIntentFallback(lastUserMessage, options?.uploadedFiles);
+}
+
+export interface StreamAIChunk {
+  type: 'token' | 'tool_call' | 'done';
+  text?: string;
+  name?: string;
+  args?: Record<string, any>;
+  provider?: string;
+}
+
+/**
+ * Universal Streaming AI generator
+ * Yields tokens as they arrive from Groq LPU, Gemini, or simulated word-stream fallback.
+ */
+export async function* streamAI(
+  messages: ChatMessageParam[],
+  tools: FunctionTool[] = TOOL_DEFINITIONS,
+  options?: CallAIOptions
+): AsyncGenerator<StreamAIChunk> {
+  const preferredProvider = (process.env.AI_PROVIDER || 'gemini').toLowerCase().trim();
+  const lastUserMessage = [...messages].reverse().find((m) => m.role === 'user')?.content || '';
+
+  const systemPrompt = `You are Khan G AI, an elite, ultra-fast AI Chatbot, Academic Exam Tutor, and File Transformation Assistant developed by Muhammad Jahanzaib (MJ) from Pakistan 🇵🇰.
+Official Tagline: "Your AI Assistant for Work, Study & Everyday Life."
+
+1. EXAM PREPARATION & ACADEMIC EXCELLENCE:
+   - Matric & Inter / FSc (Part 1 & 2: Pre-Medical, Pre-Engineering, ICS, I.Com), O/A Levels.
+   - Competitive Entry Tests: MDCAT (Biology, Chemistry, Physics, English, Logical Reasoning), ECAT, NUST NET, FAST, GIKI, PIEAS, LAT, GAT, SAT, GRE.
+   - Civil Services & Competitive Exams: CSS & PMS (Pakistan Affairs, Current Affairs, Essay Writing, Islamiat, International Relations).
+   - University & STEM: Computer Science, Calculus, Linear Algebra, Organic Chemistry, Mechanics, Economics.
+   - Teaching Methodology: Break complex concepts into intuitive analogies, provide step-by-step derivations, past-paper question formats, memory mnemonics, and high-yield study summaries.
+   - Study Encouragement: End study or revision answers with a brief, genuine note of encouragement.
+   - Academic Integrity & Trust: NEVER claim a topic is guaranteed to appear in an exam, and never guarantee a pass/fail outcome or specific exam score.
+   - Formatting style: Use crisp headings (###), bold key terms, numbered steps, code blocks with syntax tags, and executive callouts like:
+     > 💡 **Exam Tip:** High-yield concept frequently tested in board & entry tests.
+     > ⚠️ **Common Mistake:** Avoid confusing X with Y.
+
+2. CONVERSATIONAL & GENERAL INTELLIGENCE:
+   - Provide articulate, knowledgeable, friendly, and respectful answers on any topic.
+   - Flawlessly speak and respond in the language the user addresses you in: English, Urdu script, or natural Roman Urdu.
+   - If asked who made you or who your developer is, proudly identify: "I was developed by Muhammad Jahanzaib (MJ), a software engineer and AI builder from Pakistan 🇵🇰."
+   - Upgrades & Payments (SECURITY RULE): Never recite raw personal bank account numbers, IBAN, or JazzCash account credentials in conversational text. Instead, direct the user to click the "Upgrade to Pro" button in the app header or settings, where secure activation methods and official options are displayed. For direct support, you may mention developer WhatsApp (+92 333-5016770).
+   - Referral Program: If a user asks how to get Pro for free or earn bonus days, explain that they can use Khan G AI's "Refer & Earn" program in Settings/Profile to share their unique link — both they and their friends earn 3 bonus days of Pro!
+   - Upsell Guidance: When a user uploads large documents or frequently uses file tools in a session, you may politely mention once that Khan G Pro offers higher limits and 100MB file processing.
+   - Accuracy & Uncertainty: Khan G AI can make mistakes. If information cannot be verified, state clearly: "I don't have enough reliable information to answer that confidently." Never hallucinate facts.
+
+3. 21+ FILE PROCESSING & TRANSFORMATION TOOLS:
+   - Attached files: ${JSON.stringify(options?.uploadedFiles || [])}
+   - When the user asks to process an uploaded file, call the appropriate tool with accurate parameters.
+   - ONLY call a tool if at least one file is uploaded. If no file is attached and the user asks to edit/convert a file, explain politely that they can attach the file using the paperclip button.
+   - Never hallucinate file results if an operation was not executed.`;
+
+  // 1. Direct tool intent check if files are attached
+  if (options?.uploadedFiles && options.uploadedFiles.length > 0) {
+    const directIntent = resolveIntentFallback(lastUserMessage, options.uploadedFiles);
+    if (directIntent.type === 'tool_call') {
+      yield {
+        type: 'tool_call',
+        name: directIntent.name,
+        args: directIntent.args,
+        provider: directIntent.provider,
+      };
+      yield { type: 'done', provider: directIntent.provider };
+      return;
     }
   }
 
-  // 4. Built-in intelligent rule-based intent resolver (Zero network failure guarantee)
-  return resolveIntentFallback(lastUserMessage, options?.uploadedFiles);
+  // 2. Try Groq Streaming (Ultra-fast, lowest latency)
+  if (process.env.GROQ_API_KEY) {
+    try {
+      const groq = new OpenAI({
+        apiKey: process.env.GROQ_API_KEY,
+        baseURL: 'https://api.groq.com/openai/v1',
+      });
+
+      const fastModel = process.env.GROQ_MODEL || 'openai/gpt-oss-20b';
+      let stream;
+      try {
+        stream = await groq.chat.completions.create({
+          model: fastModel,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            ...messages.map((m) => ({ role: m.role, content: m.content })),
+          ],
+          stream: true,
+          temperature: 0.4,
+          max_tokens: 2048,
+        });
+      } catch {
+        stream = await groq.chat.completions.create({
+          model: 'openai/gpt-oss-120b',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            ...messages.map((m) => ({ role: m.role, content: m.content })),
+          ],
+          stream: true,
+          temperature: 0.4,
+          max_tokens: 2048,
+        });
+      }
+
+      let streamedText = '';
+      for await (const chunk of stream) {
+        const delta = chunk.choices[0]?.delta?.content || '';
+        if (delta) {
+          streamedText += delta;
+          yield { type: 'token', text: delta, provider: 'Groq Cloud (Fast AI)' };
+        }
+      }
+
+      if (streamedText.trim().length > 0) {
+        yield { type: 'done', provider: 'Groq Cloud (Fast AI)' };
+        return;
+      }
+    } catch (groqErr) {
+      console.warn('Groq streaming error, attempting fallback:', groqErr);
+    }
+  }
+
+  // 3. Try Gemini Streaming
+  if (preferredProvider === 'gemini' && Date.now() > geminiPermissionDeniedUntil) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (apiKey && apiKey !== 'MY_GEMINI_API_KEY') {
+      try {
+        const ai = new GoogleGenAI({
+          apiKey,
+          httpOptions: { headers: { 'User-Agent': 'aistudio-build' } },
+        });
+
+        const contents = [
+          { role: 'user', parts: [{ text: `${systemPrompt}\n\nUser request: ${lastUserMessage}` }] },
+        ];
+
+        const responseStream = await ai.models.generateContentStream({
+          model: 'gemini-3.8-flash',
+          contents,
+          config: { temperature: 0.3 },
+        });
+
+        let geminiText = '';
+        for await (const chunk of responseStream) {
+          const chunkText = chunk.text || '';
+          if (chunkText) {
+            geminiText += chunkText;
+            yield { type: 'token', text: chunkText, provider: 'Gemini 3.8 Flash' };
+          }
+        }
+
+        if (geminiText.trim().length > 0) {
+          yield { type: 'done', provider: 'Gemini 3.8 Flash' };
+          return;
+        }
+      } catch (geminiErr: any) {
+        if (geminiErr?.status === 403 || (geminiErr?.message && geminiErr.message.includes('403'))) {
+          geminiPermissionDeniedUntil = Date.now() + 10 * 60 * 1000;
+        }
+      }
+    }
+  }
+
+  // 4. Fallback: call non-streaming AI and yield words
+  const fallbackResult = await callAI(messages, tools, options);
+  if (fallbackResult.type === 'tool_call') {
+    yield {
+      type: 'tool_call',
+      name: fallbackResult.name,
+      args: fallbackResult.args,
+      provider: fallbackResult.provider,
+    };
+    yield { type: 'done', provider: fallbackResult.provider };
+    return;
+  }
+
+  const fullText = fallbackResult.text || 'How can I assist you today?';
+  const words = fullText.split(/(\s+)/);
+  for (const word of words) {
+    yield { type: 'token', text: word, provider: fallbackResult.provider || 'Khan G AI' };
+  }
+  yield { type: 'done', provider: fallbackResult.provider || 'Khan G AI' };
 }
+

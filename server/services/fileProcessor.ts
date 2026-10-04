@@ -1,16 +1,44 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { createRequire } from 'module';
 import sharp from 'sharp';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import ExcelJS from 'exceljs';
 import * as docx from 'docx';
+import AdmZip from 'adm-zip';
+import * as pdfParseModule from 'pdf-parse';
 import { FileRecord } from '../types.js';
+import { performImageOCR } from './ocrService.js';
 
-const require = createRequire(import.meta.url);
-const AdmZip = require('adm-zip');
-const pdfParse = require('pdf-parse');
+/**
+ * Universal PDF text extractor supporting both pdf-parse v1 and v2 (PDFParse class)
+ */
+export async function extractPdfText(buffer: Buffer): Promise<{ text: string; numPages: number }> {
+  try {
+    const pdfModule: any = pdfParseModule;
+    if (typeof pdfModule === 'function') {
+      const parsed = await pdfModule(buffer);
+      return { text: (parsed.text || '').trim(), numPages: parsed.numpages || 1 };
+    }
+    if (pdfModule && pdfModule.PDFParse) {
+      const parser = new pdfModule.PDFParse({ data: buffer });
+      const textResult = await parser.getText();
+      return { text: (textResult?.text || '').trim(), numPages: textResult?.total || 1 };
+    }
+    if (pdfModule && typeof pdfModule.default === 'function') {
+      const parsed = await pdfModule.default(buffer);
+      return { text: (parsed.text || '').trim(), numPages: parsed.numpages || 1 };
+    }
+    if (pdfModule && pdfModule.default && pdfModule.default.PDFParse) {
+      const parser = new pdfModule.default.PDFParse({ data: buffer });
+      const textResult = await parser.getText();
+      return { text: (textResult?.text || '').trim(), numPages: textResult?.total || 1 };
+    }
+  } catch (err: any) {
+    console.error('PDF text extraction error:', err?.message || err);
+  }
+  return { text: '', numPages: 1 };
+}
 
 const STORAGE_ROOT = path.join(process.cwd(), '.tmp_storage');
 const UPLOADS_DIR = path.join(STORAGE_ROOT, 'uploads');
@@ -26,8 +54,9 @@ for (const dir of [STORAGE_ROOT, UPLOADS_DIR, PROCESSED_DIR]) {
 // In-memory record cache for tracking expiration
 export const fileStore = new Map<string, FileRecord>();
 
-// One hour TTL in milliseconds
-export const FILE_TTL_MS = 60 * 60 * 1000;
+// Configurable TTL in milliseconds (default 60 minutes)
+export const FILE_TTL_MINUTES = parseInt(process.env.FILE_TTL_MINUTES || '60', 10);
+export const FILE_TTL_MS = FILE_TTL_MINUTES * 60 * 1000;
 
 export function sanitizeFilename(filename: string): string {
   const base = path.basename(filename);
@@ -41,7 +70,12 @@ export function saveProcessedFile(
   processedName: string,
   mimeType: string,
   previewText?: string,
-  isImage?: boolean
+  isImage?: boolean,
+  meta?: {
+    originalSize?: number;
+    operation?: string;
+    userId?: string;
+  }
 ): FileRecord {
   const id = crypto.randomUUID();
   const safeName = sanitizeFilename(processedName);
@@ -51,6 +85,12 @@ export function saveProcessedFile(
   fs.writeFileSync(filePath, buffer);
 
   const now = Date.now();
+  const originalSize = meta?.originalSize;
+  let savingsPercent: number | undefined;
+  if (originalSize && originalSize > buffer.length) {
+    savingsPercent = Math.round(((originalSize - buffer.length) / originalSize) * 100);
+  }
+
   const record: FileRecord = {
     id,
     originalName,
@@ -58,10 +98,15 @@ export function saveProcessedFile(
     filePath,
     mimeType,
     size: buffer.length,
+    originalSize,
+    operation: meta?.operation,
+    savingsPercent,
     createdAt: now,
     expiresAt: now + FILE_TTL_MS,
     previewText,
     isImage,
+    userId: meta?.userId,
+    storagePath: filePath,
   };
 
   fileStore.set(id, record);
@@ -69,7 +114,7 @@ export function saveProcessedFile(
 }
 
 /**
- * Cleanup expired files older than 1 hour
+ * Cleanup expired files older than configured TTL (60 min default)
  */
 export function cleanupExpiredFiles() {
   const now = Date.now();
@@ -86,7 +131,7 @@ export function cleanupExpiredFiles() {
     }
   }
 
-  // Also sweep directories for orphaned files older than 1 hour
+  // Also sweep directories for orphaned files older than TTL
   for (const dir of [UPLOADS_DIR, PROCESSED_DIR]) {
     try {
       const files = fs.readdirSync(dir);
@@ -103,14 +148,16 @@ export function cleanupExpiredFiles() {
   }
 }
 
-// Run cleanup periodically every 10 minutes
-setInterval(cleanupExpiredFiles, 10 * 60 * 1000);
+// Run cleanup periodically (default every 10 minutes)
+export const CLEANUP_INTERVAL_MINUTES = parseInt(process.env.CLEANUP_INTERVAL_MINUTES || '10', 10);
+setInterval(cleanupExpiredFiles, CLEANUP_INTERVAL_MINUTES * 60 * 1000);
 
 export interface ProcessInput {
   files: Express.Multer.File[];
   toolName: string;
   args: Record<string, any>;
   userText: string;
+  userId?: string;
 }
 
 export async function executeFileOperation(input: ProcessInput): Promise<{
@@ -447,24 +494,75 @@ export async function executeFileOperation(input: ProcessInput): Promise<{
         const raw = primaryFile.buffer || fs.readFileSync(primaryFile.path);
         let extractedText = '';
         try {
-          const parsed = await pdfParse(raw);
+          const parsed = await extractPdfText(raw);
           extractedText = parsed.text || '';
         } catch {
-          extractedText = 'Unable to extract textual content directly. The document was converted as a blank template.';
+          extractedText = '';
         }
 
-        const lines = extractedText.split('\n').map((l) => l.trim()).filter((l) => l.length > 0);
-        const paragraphs = lines.map((line) => {
-          return new docx.Paragraph({
-            children: [
-              new docx.TextRun({
-                text: line,
-                font: 'Calibri',
-                size: 24, // 12pt
-              }),
-            ],
-            spacing: { after: 120 },
-          });
+        if (!extractedText.trim()) {
+          return {
+            success: false,
+            message: `Could not extract text from "${primaryFile.originalname}". The PDF appears to be a scanned document or image without a standard text stream.`,
+            files: [],
+          };
+        }
+
+        // Group lines into paragraphs and identify potential headings and bullets
+        const rawLines = extractedText.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
+        const docxElements: docx.Paragraph[] = [];
+
+        rawLines.forEach((line) => {
+          const isHeading =
+            line.length < 65 &&
+            (/^[A-Z0-9\s:.-]+$/.test(line) ||
+              /^(chapter|section|part|\d+\.)/i.test(line) ||
+              (!line.endsWith('.') && line.length < 45));
+
+          const isBullet = /^([•\-*]|\d+\.)\s+/.test(line);
+          const cleanText = isBullet ? line.replace(/^([•\-*]|\d+\.)\s+/, '') : line;
+
+          if (isHeading) {
+            docxElements.push(
+              new docx.Paragraph({
+                children: [
+                  new docx.TextRun({
+                    text: cleanText,
+                    bold: true,
+                    size: 28, // 14pt
+                    color: '1E293B',
+                  }),
+                ],
+                heading: docx.HeadingLevel.HEADING_2,
+                spacing: { before: 200, after: 100 },
+              })
+            );
+          } else if (isBullet) {
+            docxElements.push(
+              new docx.Paragraph({
+                children: [
+                  new docx.TextRun({
+                    text: cleanText,
+                    size: 24, // 12pt
+                  }),
+                ],
+                bullet: { level: 0 },
+                spacing: { after: 80 },
+              })
+            );
+          } else {
+            docxElements.push(
+              new docx.Paragraph({
+                children: [
+                  new docx.TextRun({
+                    text: line,
+                    size: 24, // 12pt
+                  }),
+                ],
+                spacing: { after: 120 },
+              })
+            );
+          }
         });
 
         const doc = new docx.Document({
@@ -478,11 +576,12 @@ export async function executeFileOperation(input: ProcessInput): Promise<{
                       text: args.outputTitle || path.basename(primaryFile.originalname, '.pdf'),
                       bold: true,
                       size: 32, // 16pt
+                      color: '01411C',
                     }),
                   ],
                   spacing: { after: 240 },
                 }),
-                ...paragraphs,
+                ...docxElements,
               ],
             },
           ],
@@ -497,12 +596,18 @@ export async function executeFileOperation(input: ProcessInput): Promise<{
           primaryFile.originalname,
           outName,
           'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-          `Converted ${lines.length} paragraphs to editable Word document`
+          `Converted ${rawLines.length} elements to editable Word document`,
+          false,
+          {
+            originalSize: primaryFile.size,
+            operation: 'PDF to Word (.docx)',
+            userId: input.userId,
+          }
         );
 
         return {
           success: true,
-          message: `Successfully converted "${primaryFile.originalname}" to an editable Word (.docx) document.`,
+          message: `Converted "${primaryFile.originalname}" into an editable Word (.docx) document with ${rawLines.length} detected paragraphs. Note: Complex multi-column tables or embedded vector shapes may require manual formatting adjustments.`,
           files: [record],
         };
       }
@@ -524,47 +629,121 @@ export async function executeFileOperation(input: ProcessInput): Promise<{
           textContent = userText;
         }
 
+        if (!textContent.trim()) {
+          return {
+            success: false,
+            message: 'No readable text was found in the uploaded file to convert to PDF.',
+            files: [],
+          };
+        }
+
         const pdfDoc = await PDFDocument.create();
         const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
         const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-        const page = pdfDoc.addPage([595, 842]); // A4
-        const { width, height } = page.getSize();
+        let page = pdfDoc.addPage([595, 842]); // A4
+        let { width, height } = page.getSize();
         const margin = 50;
         let y = height - margin;
+        let pageNum = 1;
 
-        page.drawText('Khan G Tools — Converted Document', {
+        // Draw header
+        page.drawText('Khan G AI — Converted Document', {
           x: margin,
           y,
-          size: 16,
+          size: 14,
           font: boldFont,
-          color: rgb(0.1, 0.1, 0.2),
+          color: rgb(0.01, 0.25, 0.11),
         });
-        y -= 30;
+        y -= 25;
 
-        const words = textContent.slice(0, 3000).split(' ');
-        let currentLine = '';
         const maxLineWidth = width - margin * 2;
+        const paragraphs = textContent.split(/\r?\n/).filter((p) => p.trim().length > 0);
 
-        for (const word of words) {
-          const testLine = currentLine ? `${currentLine} ${word}` : word;
-          const textWidth = font.widthOfTextAtSize(testLine, 11);
-          if (textWidth > maxLineWidth) {
-            page.drawText(currentLine, { x: margin, y, size: 11, font, color: rgb(0.2, 0.2, 0.2) });
-            y -= 16;
-            currentLine = word;
-            if (y < margin) break;
-          } else {
-            currentLine = testLine;
+        for (const para of paragraphs) {
+          const words = para.trim().split(/\s+/);
+          let currentLine = '';
+
+          const isHeading =
+            para.length < 50 &&
+            (/^[A-Z0-9\s:.-]+$/.test(para) || /^(chapter|section|\d+\.)/i.test(para));
+          const currentFont = isHeading ? boldFont : font;
+          const currentSize = isHeading ? 12.5 : 10.5;
+          const lineHeight = isHeading ? 18 : 14;
+
+          if (isHeading) {
+            y -= 6;
+          }
+
+          for (const word of words) {
+            const testLine = currentLine ? `${currentLine} ${word}` : word;
+            const textWidth = currentFont.widthOfTextAtSize(testLine, currentSize);
+
+            if (textWidth > maxLineWidth) {
+              if (y < margin + 30) {
+                page.drawText(`Page ${pageNum}`, {
+                  x: width - margin - 40,
+                  y: margin / 2,
+                  size: 9,
+                  font,
+                  color: rgb(0.5, 0.5, 0.5),
+                });
+                page = pdfDoc.addPage([595, 842]);
+                pageNum++;
+                y = height - margin;
+              }
+
+              page.drawText(currentLine, {
+                x: margin,
+                y,
+                size: currentSize,
+                font: currentFont,
+                color: isHeading ? rgb(0.1, 0.1, 0.1) : rgb(0.2, 0.2, 0.2),
+              });
+              y -= lineHeight;
+              currentLine = word;
+            } else {
+              currentLine = testLine;
+            }
+          }
+
+          if (currentLine) {
+            if (y < margin + 30) {
+              page.drawText(`Page ${pageNum}`, {
+                x: width - margin - 40,
+                y: margin / 2,
+                size: 9,
+                font,
+                color: rgb(0.5, 0.5, 0.5),
+              });
+              page = pdfDoc.addPage([595, 842]);
+              pageNum++;
+              y = height - margin;
+            }
+            page.drawText(currentLine, {
+              x: margin,
+              y,
+              size: currentSize,
+              font: currentFont,
+              color: isHeading ? rgb(0.1, 0.1, 0.1) : rgb(0.2, 0.2, 0.2),
+            });
+            y -= lineHeight + 4;
           }
         }
 
-        if (currentLine && y >= margin) {
-          page.drawText(currentLine, { x: margin, y, size: 11, font, color: rgb(0.2, 0.2, 0.2) });
-        }
+        // Draw page footer on last page
+        page.drawText(`Page ${pageNum}`, {
+          x: width - margin - 40,
+          y: margin / 2,
+          size: 9,
+          font,
+          color: rgb(0.5, 0.5, 0.5),
+        });
 
         const pdfBytes = await pdfDoc.save();
-        const baseName = primaryFile ? path.basename(primaryFile.originalname, path.extname(primaryFile.originalname)) : 'document';
+        const baseName = primaryFile
+          ? path.basename(primaryFile.originalname, path.extname(primaryFile.originalname))
+          : 'document';
         const outName = `${baseName}_converted.pdf`;
 
         const record = saveProcessedFile(
@@ -572,12 +751,18 @@ export async function executeFileOperation(input: ProcessInput): Promise<{
           primaryFile ? primaryFile.originalname : 'text.txt',
           outName,
           'application/pdf',
-          'Document converted to PDF format'
+          `Document converted to PDF format (${pageNum} pages)`,
+          false,
+          {
+            originalSize: primaryFile?.size,
+            operation: 'Word / Text to PDF',
+            userId: input.userId,
+          }
         );
 
         return {
           success: true,
-          message: `Converted document into a PDF file.`,
+          message: `Converted document into a PDF file (${pageNum} page(s)).`,
           files: [record],
         };
       }
@@ -595,7 +780,7 @@ export async function executeFileOperation(input: ProcessInput): Promise<{
         }
 
         const workbook = new ExcelJS.Workbook();
-        workbook.creator = 'Khan G Tools';
+        workbook.creator = 'Khan G AI';
         workbook.created = new Date();
 
         const sheet = workbook.addWorksheet(args.sheetName || 'Sheet1');
@@ -657,7 +842,7 @@ export async function executeFileOperation(input: ProcessInput): Promise<{
 
         const raw = primaryFile.buffer || fs.readFileSync(primaryFile.path);
         const workbook = new ExcelJS.Workbook();
-        await workbook.xlsx.load(raw);
+        await workbook.xlsx.load(raw as any);
 
         const sheetIndex = Number(args.sheetIndex) || 1;
         const sheet = workbook.worksheets[sheetIndex - 1] || workbook.worksheets[0];
@@ -704,24 +889,54 @@ export async function executeFileOperation(input: ProcessInput): Promise<{
         }
 
         const raw = primaryFile.buffer || fs.readFileSync(primaryFile.path);
-        let extractedText = '';
+        const isPdf = primaryFile.mimetype === 'application/pdf' || primaryFile.originalname.toLowerCase().endsWith('.pdf');
+        const isImage =
+          primaryFile.mimetype.startsWith('image/') ||
+          /\.(jpe?g|png|webp|avif|bmp|gif|tiff)$/i.test(primaryFile.originalname);
 
-        if (primaryFile.mimetype === 'application/pdf' || primaryFile.originalname.endsWith('.pdf')) {
-          try {
-            const parsed = await pdfParse(raw);
-            extractedText = parsed.text || '';
-          } catch (err: any) {
-            extractedText = `PDF parsing note: ${err?.message || 'Standard text stream empty'}`;
+        let extractedText = '';
+        let extractionNote = '';
+
+        if (isImage) {
+          // Genuine OCR via multimodal vision service
+          const ocrResult = await performImageOCR(raw, primaryFile.mimetype, {
+            includeSummary: args.includeSummary,
+          });
+
+          if (!ocrResult.success) {
+            return {
+              success: false,
+              message: ocrResult.errorMessage || "I couldn't extract readable text from this image. The image appears blank, illegible, or does not contain recognizable text.",
+              files: [],
+            };
           }
+
+          extractedText = ocrResult.text;
+          extractionNote = ocrResult.confidenceNote || `Transcribed ${ocrResult.wordCount} words via OCR`;
+        } else if (isPdf) {
+          try {
+            const parsed = await extractPdfText(raw);
+            extractedText = (parsed.text || '').trim();
+          } catch (err: any) {
+            extractedText = '';
+          }
+
+          if (!extractedText || extractedText.length < 5) {
+            return {
+              success: false,
+              message: `I couldn't find an embedded text stream in "${primaryFile.originalname}". It appears to be a scanned document. To extract text using Optical Character Recognition, please convert or export individual pages as images (PNG or JPG).`,
+              files: [],
+            };
+          }
+          extractionNote = `Extracted ${extractedText.split(/\s+/).length} words from PDF text stream`;
         } else {
-          // For images, we provide an informative header + basic metadata analysis
-          const meta = await sharp(raw).metadata();
-          extractedText = `Image Analysis:\nFormat: ${meta.format}\nDimensions: ${meta.width}x${meta.height} px\nChannels: ${meta.channels}\nColor Space: ${meta.space}\nDensity: ${meta.density || 'default'}\nText extraction completed.`;
+          // Fallback text file read
+          extractedText = raw.toString('utf-8');
+          extractionNote = 'Extracted plain text content';
         }
 
         const baseName = path.basename(primaryFile.originalname, path.extname(primaryFile.originalname));
         const outName = `${baseName}_extracted_text.txt`;
-
         const preview = extractedText.trim().slice(0, 300) + (extractedText.length > 300 ? '...' : '');
 
         const record = saveProcessedFile(
@@ -729,12 +944,18 @@ export async function executeFileOperation(input: ProcessInput): Promise<{
           primaryFile.originalname,
           outName,
           'text/plain',
-          preview || 'Text extracted successfully'
+          preview || 'Text extracted successfully',
+          false,
+          {
+            originalSize: primaryFile.size,
+            operation: isImage ? 'OCR Text Extraction' : 'PDF Text Extraction',
+            userId: input.userId,
+          }
         );
 
         return {
           success: true,
-          message: `Extracted text from "${primaryFile.originalname}".\n\nPreview:\n"${preview || 'No text detected'}"`,
+          message: `${extractionNote} from "${primaryFile.originalname}".\n\nExtracted Text Preview:\n"${preview}"`,
           files: [record],
         };
       }
@@ -762,12 +983,18 @@ export async function executeFileOperation(input: ProcessInput): Promise<{
           primaryFile.originalname,
           outName,
           'application/pdf',
-          `Compressed with stream optimization (Saved ~${savings}%)`
+          `Compressed with stream optimization (Saved ~${savings}%)`,
+          false,
+          {
+            originalSize: origSize,
+            operation: 'PDF Compression',
+            userId: input.userId,
+          }
         );
 
         return {
           success: true,
-          message: `Optimized and compressed PDF "${primaryFile.originalname}". New size: ${(newSize / 1024).toFixed(1)} KB.`,
+          message: `Optimized and compressed PDF "${primaryFile.originalname}". New size: ${(newSize / 1024).toFixed(1)} KB (Saved ~${savings}%).`,
           files: [record],
         };
       }
@@ -780,9 +1007,11 @@ export async function executeFileOperation(input: ProcessInput): Promise<{
 
         const zipName = sanitizeFilename(args.zipName || 'archive') + '.zip';
         const zip = new AdmZip();
+        let totalOriginalSize = 0;
 
         for (const file of files) {
           const raw = file.buffer || fs.readFileSync(file.path);
+          totalOriginalSize += raw.length;
           zip.addFile(sanitizeFilename(file.originalname), raw);
         }
 
@@ -792,7 +1021,13 @@ export async function executeFileOperation(input: ProcessInput): Promise<{
           files.length > 1 ? `${files.length}_files.zip` : files[0].originalname,
           zipName,
           'application/zip',
-          `Contains ${files.length} archived files`
+          `Contains ${files.length} archived files`,
+          false,
+          {
+            originalSize: totalOriginalSize,
+            operation: 'ZIP Archive',
+            userId: input.userId,
+          }
         );
 
         return {
@@ -816,40 +1051,92 @@ export async function executeFileOperation(input: ProcessInput): Promise<{
           return { success: false, message: 'The uploaded zip file is empty.', files: [] };
         }
 
+        const MAX_ZIP_FILES = parseInt(process.env.MAX_ZIP_FILES || '25', 10);
+        const MAX_EXTRACTED_SIZE_MB = parseInt(process.env.MAX_EXTRACTED_SIZE_MB || '50', 10);
+        const ZIP_MAX_RATIO = parseInt(process.env.ZIP_MAX_RATIO || '100', 10);
+        const MAX_TOTAL_UNZIPPED_BYTES = MAX_EXTRACTED_SIZE_MB * 1024 * 1024;
+        const MAX_FILE_UNZIPPED_BYTES = Math.floor(MAX_TOTAL_UNZIPPED_BYTES / 2);
+
         const extractedRecords: FileRecord[] = [];
         let totalExtractedBytes = 0;
-        const MAX_TOTAL_UNZIPPED_BYTES = 50 * 1024 * 1024; // 50MB protection
-        const MAX_FILE_UNZIPPED_BYTES = 25 * 1024 * 1024;  // 25MB single file limit
+        let processedCount = 0;
 
-        for (const entry of entries.slice(0, 10)) {
-          if (!entry.isDirectory) {
-            // Guard against zip bomb / path traversal
-            const cleanName = path.basename(entry.name || 'extracted_file');
-            if (!cleanName || cleanName.startsWith('.')) continue;
+        for (const entry of entries) {
+          if (processedCount >= MAX_ZIP_FILES) break;
+          if (entry.isDirectory) continue;
 
-            if (entry.header && entry.header.size > MAX_FILE_UNZIPPED_BYTES) {
-              continue;
+          // 1. Strict Path Traversal Prevention
+          const rawEntryName = entry.entryName || '';
+          if (
+            rawEntryName.includes('..') ||
+            rawEntryName.startsWith('/') ||
+            rawEntryName.startsWith('\\') ||
+            rawEntryName.includes('\0') ||
+            rawEntryName.includes(':')
+          ) {
+            continue; // Skip suspicious path traversal entry
+          }
+
+          const cleanName = path.basename(rawEntryName);
+          if (!cleanName || cleanName.startsWith('.') || cleanName.match(/\.(exe|sh|bat|cmd|vbs|bin)$/i)) {
+            continue; // Skip dotfiles or dangerous executables
+          }
+
+          // 2. Decompression Bomb Protection
+          const header = entry.header;
+          if (header) {
+            const uncompressedSize = header.size;
+            const compressedSize = header.compressedSize || 1;
+
+            if (compressedSize > 0 && uncompressedSize / compressedSize > ZIP_MAX_RATIO) {
+              return {
+                success: false,
+                message: 'Extraction aborted: Potential zip bomb detected (abnormal compression ratio).',
+                files: [],
+              };
             }
 
-            const entryBuffer = entry.getData();
-            if (entryBuffer.length > MAX_FILE_UNZIPPED_BYTES) continue;
-            totalExtractedBytes += entryBuffer.length;
-            if (totalExtractedBytes > MAX_TOTAL_UNZIPPED_BYTES) break;
-
-            const rec = saveProcessedFile(
-              entryBuffer,
-              primaryFile.originalname,
-              cleanName,
-              'application/octet-stream',
-              `Extracted from ${primaryFile.originalname}`
-            );
-            extractedRecords.push(rec);
+            if (uncompressedSize > MAX_FILE_UNZIPPED_BYTES) {
+              continue; // Skip oversized single file
+            }
           }
+
+          const entryBuffer = entry.getData();
+          if (entryBuffer.length > MAX_FILE_UNZIPPED_BYTES) continue;
+
+          totalExtractedBytes += entryBuffer.length;
+          if (totalExtractedBytes > MAX_TOTAL_UNZIPPED_BYTES) {
+            break; // Stop at maximum total extracted size
+          }
+
+          const rec = saveProcessedFile(
+            entryBuffer,
+            primaryFile.originalname,
+            cleanName,
+            'application/octet-stream',
+            `Extracted from ${primaryFile.originalname}`,
+            false,
+            {
+              originalSize: entry.header ? entry.header.compressedSize : undefined,
+              operation: 'ZIP Extraction',
+              userId: input.userId,
+            }
+          );
+          extractedRecords.push(rec);
+          processedCount++;
+        }
+
+        if (extractedRecords.length === 0) {
+          return {
+            success: false,
+            message: 'No safe extractable files found inside this archive.',
+            files: [],
+          };
         }
 
         return {
           success: true,
-          message: `Extracted ${entries.length} items from "${primaryFile.originalname}". (${extractedRecords.length} file(s) available below for instant download).`,
+          message: `Extracted ${extractedRecords.length} file(s) safely from "${primaryFile.originalname}". Files are ready for download below.`,
           files: extractedRecords,
         };
       }
@@ -865,7 +1152,7 @@ export async function executeFileOperation(input: ProcessInput): Promise<{
           const raw = primaryFile.buffer || fs.readFileSync(primaryFile.path);
           const ext = path.extname(primaryFile.originalname).toLowerCase();
           if (ext === '.pdf') {
-            const parsed = await pdfParse(raw);
+            const parsed = await extractPdfText(raw);
             fullText = parsed.text || '';
           } else if (ext === '.docx' || ext === '.doc') {
             try {
@@ -919,7 +1206,7 @@ export async function executeFileOperation(input: ProcessInput): Promise<{
                 new docx.Paragraph({
                   children: [
                     new docx.TextRun({
-                      text: `Document Statistics: ${wordCount} words • ~${readTimeMinutes} min read time • Generated by Khan G Tools`,
+                      text: `Document Statistics: ${wordCount} words • ~${readTimeMinutes} min read time • Generated by Khan G AI`,
                       italics: true,
                       color: '666666',
                       size: 20,
@@ -1121,7 +1408,7 @@ export async function executeFileOperation(input: ProcessInput): Promise<{
           const raw = primaryFile.buffer || fs.readFileSync(primaryFile.path);
           const ext = path.extname(primaryFile.originalname).toLowerCase();
           if (ext === '.pdf') {
-            const parsed = await pdfParse(raw);
+            const parsed = await extractPdfText(raw);
             originalText = parsed.text || '';
           } else if (ext === '.docx') {
             try {
@@ -1243,7 +1530,7 @@ export async function executeFileOperation(input: ProcessInput): Promise<{
           : userText;
 
         const title = args.reportTitle || 'Executive Project & Meeting Report';
-        const author = args.author || 'Khan G Tools AI Suite';
+        const author = args.author || 'Khan G AI Suite';
         const dateStr = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
         const lines = rawContent.split('\n').map((l) => l.trim()).filter(Boolean);
@@ -1336,7 +1623,7 @@ export async function executeFileOperation(input: ProcessInput): Promise<{
           const raw = primaryFile.buffer || fs.readFileSync(primaryFile.path);
           const ext = path.extname(primaryFile.originalname).toLowerCase();
           if (ext === '.pdf') {
-            const parsed = await pdfParse(raw);
+            const parsed = await extractPdfText(raw);
             sourceText = parsed.text || '';
           } else {
             sourceText = raw.toString('utf-8');
@@ -1348,11 +1635,11 @@ export async function executeFileOperation(input: ProcessInput): Promise<{
         // Translation dictionary and formatter
         let translatedText = '';
         if (targetLang === 'urdu') {
-          translatedText = `[اردو ترجمہ]\nیہ دستاویز خان جی ٹولز کے ذریعے ترجمہ کی گئی ہے۔\n\n${sourceText.slice(0, 1000)}`;
+          translatedText = `[اردو ترجمہ]\nیہ دستاویز خان جی اے آئی کے ذریعے ترجمہ کی گئی ہے۔\n\n${sourceText.slice(0, 1000)}`;
         } else if (targetLang === 'roman_urdu') {
-          translatedText = `[Roman Urdu Tarjuma]\nYeh document Khan G Tools ke zariye Roman Urdu mein tarjuma kiya gaya hai.\n\n${sourceText.slice(0, 1000)}`;
+          translatedText = `[Roman Urdu Tarjuma]\nYeh document Khan G AI ke zariye Roman Urdu mein tarjuma kiya gaya hai.\n\n${sourceText.slice(0, 1000)}`;
         } else {
-          translatedText = `[English Translation]\nTranslated via Khan G Tools AI Suite.\n\n${sourceText.slice(0, 1000)}`;
+          translatedText = `[English Translation]\nTranslated via Khan G AI Suite.\n\n${sourceText.slice(0, 1000)}`;
         }
 
         const doc = new docx.Document({
@@ -1425,7 +1712,7 @@ export async function executeFileOperation(input: ProcessInput): Promise<{
       case 'remove_background': {
         return {
           success: false,
-          message: 'AI Background Removal is scheduled for Khan G Tools Pro Suite. In the meantime, you can resize, convert, compress, or turn your image into a PDF!',
+          message: 'AI Background Removal is scheduled for Khan G AI Pro Suite. In the meantime, you can resize, convert, compress, or turn your image into a PDF!',
           files: [],
           clarification: true,
         };

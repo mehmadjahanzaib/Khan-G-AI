@@ -1,5 +1,21 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Paperclip, Send, X, File, Image as ImageIcon, FileText, AlertCircle, Loader2 } from 'lucide-react';
+import { 
+  Paperclip, 
+  ArrowUpRight, 
+  X, 
+  Image as ImageIcon, 
+  FileText, 
+  AlertCircle, 
+  Loader2, 
+  Mic, 
+  MicOff,
+  GraduationCap,
+  Calculator,
+  PenTool,
+  Languages,
+  Lightbulb,
+  Code
+} from 'lucide-react';
 
 interface ChatInputProps {
   onSendMessage: (text: string, files: File[]) => void;
@@ -22,39 +38,95 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
+  const [isListening, setIsListening] = useState(false);
+  const [speechSupported, setSpeechSupported] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const recognitionRef = useRef<any>(null);
 
-  // Sync external prompt selection (e.g. from Tools modal, starter pills, or suggestions)
+  // Initialize Web Speech Recognition
   useEffect(() => {
-    if (initialPrompt && initialPrompt.trim()) {
-      setText(initialPrompt.trim());
-      if (onClearInitialPrompt) {
-        onClearInitialPrompt();
-      }
-      setTimeout(() => {
-        if (textareaRef.current) {
-          textareaRef.current.focus();
-          textareaRef.current.selectionStart = textareaRef.current.value.length;
-          textareaRef.current.selectionEnd = textareaRef.current.value.length;
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+
+      recognition.onresult = (event: any) => {
+        let currentTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          currentTranscript += event.results[i][0].transcript;
         }
+        if (currentTranscript.trim()) {
+          setText((prev) => (prev ? `${prev} ${currentTranscript.trim()}` : currentTranscript.trim()));
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        console.warn('Speech recognition error:', event.error);
+        setIsListening(false);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = recognition;
+    } else {
+      setSpeechSupported(false);
+    }
+
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.abort();
+      }
+    };
+  }, []);
+
+  // Set initial prompt if triggered externally
+  useEffect(() => {
+    if (initialPrompt) {
+      setText(initialPrompt);
+      if (onClearInitialPrompt) onClearInitialPrompt();
+      setTimeout(() => {
+        textareaRef.current?.focus();
       }, 50);
     }
   }, [initialPrompt, onClearInitialPrompt]);
 
-  const MAX_FILE_SIZE_BYTES = maxFileSizeMB * 1024 * 1024;
+  const toggleVoiceRecording = () => {
+    if (!speechSupported) {
+      alert('Speech recognition is not supported in this browser. Please use Chrome or Edge.');
+      return;
+    }
 
-  const handleFiles = (incomingFiles: FileList | File[]) => {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+    } else {
+      try {
+        recognitionRef.current?.start();
+        setIsListening(true);
+      } catch (err) {
+        console.error('Failed to start speech recognition:', err);
+      }
+    }
+  };
+
+  const handleFiles = (files: FileList | File[]) => {
     setFileError(null);
     const newFiles: File[] = [];
+    const maxBytes = maxFileSizeMB * 1024 * 1024;
 
-    Array.from(incomingFiles).forEach((file) => {
-      if (file.size > MAX_FILE_SIZE_BYTES) {
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (file.size > maxBytes) {
         setFileError(`File "${file.name}" exceeds the ${maxFileSizeMB}MB limit.`);
-        return;
+        continue;
       }
       newFiles.push(file);
-    });
+    }
 
     if (newFiles.length > 0) {
       setAttachedFiles((prev) => [...prev, ...newFiles]);
@@ -70,15 +142,15 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     if (isLoading) return;
     if (!text.trim() && attachedFiles.length === 0) return;
 
-    onSendMessage(text.trim(), attachedFiles);
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+    }
+
+    onSendMessage(text, attachedFiles);
     setText('');
     setAttachedFiles([]);
     setFileError(null);
-
-    // Reset textarea height
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -88,51 +160,30 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     }
   };
 
-  // Adjust textarea height dynamically
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
-    }
-  }, [text]);
-
-  const quickSuggestions = [
-    'Is PDF ko summarize karo',
-    'Is image ka size 500 KB se kam karo',
-    'Is Excel file mein total calculate karo',
-    'Is document ki spelling mistakes correct karo',
-    'Resize image to 800x600',
-    'Convert to editable Word (.docx)',
-    'Convert to PDF',
+  const presetActionChips = [
+    { label: 'Study & Learn', icon: <GraduationCap className="w-3.5 h-3.5 text-[#00A86B]" />, prompt: 'Can you create a 7 days study plan for CSS exam with focused daily tasks and subjects?' },
+    { label: 'Solve Math', icon: <Calculator className="w-3.5 h-3.5 text-[#00A86B]" />, prompt: 'Solve this math problem step by step with formulas: ' },
+    { label: 'Analyze File', icon: <FileText className="w-3.5 h-3.5 text-[#00A86B]" />, prompt: 'I want to analyze and extract insights from a file. What formats can you process?' },
+    { label: 'Write Something', icon: <PenTool className="w-3.5 h-3.5 text-[#00A86B]" />, prompt: 'Write a professional email/letter regarding: ' },
+    { label: 'Translate', icon: <Languages className="w-3.5 h-3.5 text-[#00A86B]" />, prompt: 'Translate this text into professional English/Urdu with natural phrasing: ' },
+    { label: 'Create & Brainstorm', icon: <Lightbulb className="w-3.5 h-3.5 text-[#00A86B]" />, prompt: 'Brainstorm innovative concepts for: ' },
+    { label: 'Code Help', icon: <Code className="w-3.5 h-3.5 text-[#00A86B]" />, prompt: 'Help me debug or write code for: ' },
   ];
 
   return (
-    <div className="w-full max-w-4xl mx-auto px-4 pb-4">
-      {/* Quick Suggestion Chips */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-2 scrollbar-none text-xs text-stone-600">
-        <span className="text-[11px] font-medium text-stone-400 shrink-0">Try:</span>
-        {quickSuggestions.map((prompt, i) => (
-          <button
-            key={i}
-            id={`suggestion-chip-${i}`}
-            type="button"
-            onClick={() => {
-              setText(prompt);
-              if (onSuggestionClick) {
-                onSuggestionClick(prompt);
-              }
-              setTimeout(() => {
-                textareaRef.current?.focus();
-              }, 20);
-            }}
-            className="shrink-0 bg-stone-100 hover:bg-stone-200 text-stone-700 px-2.5 py-1 rounded-full border border-stone-200/80 transition-colors whitespace-nowrap active:scale-95"
-          >
-            {prompt}
+    <div className="w-full max-w-4xl mx-auto px-3 sm:px-6 pb-4">
+      {/* File Upload Error Alert */}
+      {fileError && (
+        <div className="flex items-center gap-2 p-2.5 mb-2 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900 rounded-xl text-rose-700 dark:text-rose-300 text-xs animate-shake">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span className="flex-1">{fileError}</span>
+          <button onClick={() => setFileError(null)} className="p-0.5 hover:text-rose-900">
+            <X className="w-3.5 h-3.5" />
           </button>
-        ))}
-      </div>
+        </div>
+      )}
 
-      {/* Main Input Container with Drag & Drop */}
+      {/* Main Composer Box */}
       <div
         onDragOver={(e) => {
           e.preventDefault();
@@ -149,77 +200,83 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             handleFiles(e.dataTransfer.files);
           }
         }}
-        className={`relative bg-white border rounded-2xl p-2.5 sm:p-3 shadow-md transition-all ${
+        className={`relative bg-white dark:bg-stone-900 border rounded-2xl p-2.5 sm:p-3 shadow-md transition-all ${
           isDragging
-            ? 'border-indigo-500 ring-2 ring-indigo-500/20 bg-indigo-50/20'
-            : 'border-stone-300 focus-within:border-stone-500 focus-within:ring-1 focus-within:ring-stone-400'
+            ? 'border-[#00A86B] ring-2 ring-[#00A86B]/20 bg-[#E8F7F0]/30 dark:bg-emerald-950/20'
+            : isListening
+            ? 'border-rose-500 ring-2 ring-rose-500/30'
+            : 'border-[#DCEBE5] dark:border-stone-800 focus-within:border-[#00A86B] dark:focus-within:border-[#00A86B] focus-within:ring-2 focus-within:ring-[#00A86B]/15'
         }`}
       >
+        {/* Voice Active Indicator */}
+        {isListening && (
+          <div className="flex items-center justify-between bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-xs px-3 py-1.5 rounded-xl mb-2 animate-pulse">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-600 animate-ping" />
+              <span className="font-semibold">Listening to speech... Speak clearly</span>
+            </div>
+            <button
+              onClick={toggleVoiceRecording}
+              className="text-xs font-bold underline hover:text-rose-900"
+            >
+              Stop
+            </button>
+          </div>
+        )}
+
         {/* Attached Files Preview Bar */}
         {attachedFiles.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-2 p-1.5 bg-stone-50 rounded-xl border border-stone-200/70 max-h-32 overflow-y-auto">
+          <div className="flex flex-wrap gap-2 mb-2 p-1.5 bg-stone-50 dark:bg-stone-800/80 rounded-xl border border-stone-200/80 dark:border-stone-700 max-h-32 overflow-y-auto">
             {attachedFiles.map((file, idx) => (
               <div
                 key={idx}
-                className="flex items-center gap-1.5 bg-white border border-stone-200 text-stone-800 text-xs px-2 py-1 rounded-lg shadow-2xs"
+                className="flex items-center gap-1.5 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-800 dark:text-stone-200 text-xs px-2.5 py-1 rounded-lg shadow-2xs"
               >
                 {file.type.startsWith('image/') ? (
-                  <ImageIcon className="w-3.5 h-3.5 text-indigo-600" />
-                ) : file.type === 'application/pdf' ? (
-                  <FileText className="w-3.5 h-3.5 text-rose-600" />
+                  <ImageIcon className="w-3.5 h-3.5 text-[#00A86B]" />
                 ) : (
-                  <File className="w-3.5 h-3.5 text-stone-500" />
+                  <FileText className="w-3.5 h-3.5 text-stone-500" />
                 )}
-                <span className="font-medium truncate max-w-[120px] sm:max-w-[180px]">{file.name}</span>
-                <span className="text-[10px] text-stone-400">
-                  ({(file.size / 1024).toFixed(0)}KB)
-                </span>
+                <span className="truncate max-w-[140px] font-medium">{file.name}</span>
                 <button
                   type="button"
                   onClick={() => removeFile(idx)}
-                  className="p-1 text-stone-400 hover:text-stone-700 rounded-full hover:bg-stone-100 min-w-[20px] min-h-[20px] flex items-center justify-center transition-colors"
+                  className="p-0.5 hover:text-rose-600 transition-colors"
                   title="Remove file"
-                  aria-label="Remove file"
                 >
-                  <X className="w-3.5 h-3.5" />
+                  <X className="w-3 h-3" />
                 </button>
               </div>
             ))}
           </div>
         )}
 
-        {/* File Error Notification */}
-        {fileError && (
-          <div className="flex items-center gap-1.5 text-xs text-rose-600 bg-rose-50 px-2.5 py-1.5 rounded-lg mb-2 border border-rose-200">
-            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-            <span>{fileError}</span>
-          </div>
-        )}
-
-        {/* Input Controls Row */}
-        <div className="flex items-end gap-2">
-          {/* Paperclip Button */}
+        {/* Input Bar Controls */}
+        <div className="flex items-center gap-2">
+          {/* Hidden File Input */}
           <input
-            ref={fileInputRef}
             type="file"
-            multiple
-            className="hidden"
+            ref={fileInputRef}
             onChange={(e) => {
               if (e.target.files) handleFiles(e.target.files);
               e.target.value = '';
             }}
+            multiple
+            className="hidden"
+            accept="image/*,.pdf,.docx,.doc,.xlsx,.xls,.pptx,.txt,.csv,.json,.md,.zip"
           />
+
+          {/* Paperclip Button */}
           <button
-            id="chat-attach-file-btn"
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="p-2 text-stone-500 hover:text-stone-900 hover:bg-stone-100 rounded-xl transition-colors shrink-0"
-            title="Attach file(s) (Images, PDFs, Word, Excel, CSV, Zip, etc.)"
+            className="p-2 text-stone-400 hover:text-stone-700 dark:text-stone-400 dark:hover:text-white hover:bg-stone-100 dark:hover:bg-stone-800 rounded-xl transition-colors shrink-0"
+            title="Attach file(s) (Images, PDFs, Word, Excel, CSV, Zip)"
           >
             <Paperclip className="w-5 h-5 -rotate-45" />
           </button>
 
-          {/* Chat Textarea */}
+          {/* Textarea */}
           <textarea
             id="chat-input-textarea"
             ref={textareaRef}
@@ -228,40 +285,77 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             onKeyDown={handleKeyDown}
             rows={1}
             placeholder={
-              attachedFiles.length > 0
-                ? "Describe what to do (e.g. 'Resize to 800x600', 'Convert to PDF', 'Extract text')..."
-                : "Attach a file or type a prompt (e.g. 'Convert this to PDF', 'Make an Excel sheet')..."
+              isListening
+                ? 'Listening to speech...'
+                : attachedFiles.length > 0
+                ? "Describe what to do (e.g. 'Extract text', 'Convert to Word', 'Compress')..."
+                : "Type your message here..."
             }
-            className="w-full resize-none max-h-32 text-sm text-stone-900 placeholder:text-stone-400 bg-transparent focus:outline-none py-1.5 leading-relaxed"
+            className="w-full resize-none max-h-32 text-sm text-stone-900 dark:text-stone-100 placeholder:text-stone-400 dark:placeholder:text-stone-500 bg-transparent focus:outline-none py-1.5 leading-relaxed"
           />
 
-          {/* Send Button */}
+          {/* Microphone Voice Button */}
+          <button
+            id="chat-voice-input-btn"
+            type="button"
+            onClick={toggleVoiceRecording}
+            className={`p-2 rounded-xl transition-colors shrink-0 ${
+              isListening
+                ? 'bg-rose-600 text-white animate-pulse'
+                : 'text-stone-400 hover:text-stone-700 dark:text-stone-400 dark:hover:text-white hover:bg-stone-100 dark:hover:bg-stone-800'
+            }`}
+            title={isListening ? 'Stop listening' : 'Voice Input (Speak clearly)'}
+          >
+            {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+          </button>
+
+          {/* Emerald Send Button with ArrowUpRight */}
           <button
             id="chat-send-message-btn"
             type="button"
             disabled={isLoading || (!text.trim() && attachedFiles.length === 0)}
             onClick={() => handleSubmit()}
-            className={`p-2 rounded-xl transition-all shrink-0 flex items-center justify-center ${
+            className={`p-2.5 rounded-xl transition-all shrink-0 flex items-center justify-center ${
               isLoading || (!text.trim() && attachedFiles.length === 0)
-                ? 'bg-stone-200 text-stone-400 cursor-not-allowed'
-                : 'bg-stone-900 hover:bg-stone-800 text-white shadow-sm hover:scale-105 active:scale-95'
+                ? 'bg-stone-200 dark:bg-stone-800 text-stone-400 dark:text-stone-600 cursor-not-allowed'
+                : 'bg-[#00A86B] hover:bg-[#00925d] text-white shadow-sm shadow-[#00A86B]/25 hover:scale-105 active:scale-95'
             }`}
             title="Send message"
           >
             {isLoading ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
+              <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
-              <Send className="w-4 h-4" />
+              <ArrowUpRight className="w-4 h-4 stroke-[2.5]" />
             )}
           </button>
         </div>
+      </div>
 
-        {/* Small footer caption */}
-        <div className="flex flex-col xs:flex-row xs:items-center justify-between text-[11px] text-stone-400 mt-1.5 px-1 gap-1 select-none">
-          <span>Drop files anywhere • Max {maxFileSizeMB}MB</span>
-          <span>Files auto-delete after 1 hour</span>
-        </div>
+      {/* Preset Action Chips Underneath Input matching user's reference */}
+      <div className="flex items-center gap-1.5 overflow-x-auto py-2.5 scrollbar-none text-xs text-stone-600 dark:text-stone-300">
+        {presetActionChips.map((chip, i) => (
+          <button
+            key={i}
+            id={`preset-chip-${i}`}
+            type="button"
+            onClick={() => {
+              setText(chip.prompt);
+              if (onSuggestionClick) {
+                onSuggestionClick(chip.prompt);
+              }
+              setTimeout(() => {
+                textareaRef.current?.focus();
+              }, 20);
+            }}
+            className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-stone-900 hover:bg-[#E8F7F0] dark:hover:bg-emerald-950/40 text-stone-700 dark:text-stone-300 hover:text-[#00A86B] border border-[#DCEBE5] dark:border-stone-800 hover:border-[#00A86B] transition-colors whitespace-nowrap active:scale-95 shadow-2xs font-medium cursor-pointer"
+          >
+            {chip.icon}
+            <span>{chip.label}</span>
+          </button>
+        ))}
       </div>
     </div>
   );
 };
+
+export default ChatInput;

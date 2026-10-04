@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { X, Mail, Lock, User as UserIcon, ArrowRight, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { X, Mail, Lock, User as UserIcon, ArrowRight, Loader2, AlertCircle, CheckCircle2, Copy, Check, ExternalLink, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.js';
+import firebaseConfigFile from '../../firebase-applet-config.json';
 
 export const AuthModal: React.FC = () => {
   const { 
@@ -20,7 +21,13 @@ export const AuthModal: React.FC = () => {
   const [displayName, setDisplayName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isUnauthorizedDomain, setIsUnauthorizedDomain] = useState(false);
+  const [copiedDomain, setCopiedDomain] = useState(false);
   const [resetSuccessMessage, setResetSuccessMessage] = useState<string | null>(null);
+
+  const currentHostname = typeof window !== 'undefined' ? window.location.hostname : '';
+  const firebaseProjectId = (firebaseConfigFile as any)?.projectId || 'khan-g-2ba49';
+  const consoleSettingsUrl = `https://console.firebase.google.com/project/${firebaseProjectId}/authentication/settings`;
 
   if (!isAuthModalOpen) return null;
 
@@ -64,6 +71,7 @@ export const AuthModal: React.FC = () => {
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setIsUnauthorizedDomain(false);
     setResetSuccessMessage(null);
 
     if (!email.trim()) {
@@ -117,12 +125,18 @@ export const AuthModal: React.FC = () => {
 
   const handleGoogleSignIn = async () => {
     setError(null);
+    setIsUnauthorizedDomain(false);
     setResetSuccessMessage(null);
     try {
       setIsLoading(true);
       await signInWithGoogle();
       closeAuthModal();
     } catch (err: any) {
+      const code = (err?.code || '').toLowerCase();
+      const rawMsg = (err?.message || '').toLowerCase();
+      if (code.includes('unauthorized-domain') || rawMsg.includes('unauthorized-domain')) {
+        setIsUnauthorizedDomain(true);
+      }
       setError(getFriendlyErrorMessage(err));
     } finally {
       setIsLoading(false);
@@ -136,12 +150,12 @@ export const AuthModal: React.FC = () => {
         if (e.target === e.currentTarget) closeAuthModal();
       }}
     >
-      <div className="bg-white w-full max-w-md rounded-2xl shadow-xl border border-stone-200 overflow-hidden flex flex-col">
+      <div className="bg-white w-full max-w-md rounded-2xl shadow-xl border border-stone-200 overflow-hidden flex flex-col max-h-[92vh]">
         {/* Header */}
         <div className="px-6 pt-6 pb-4 border-b border-stone-100 flex items-center justify-between">
           <div>
             <h2 className="text-xl font-bold text-stone-900 tracking-tight">
-              {authModalMode === 'login' && 'Sign in to Khan G Tools'}
+              {authModalMode === 'login' && 'Sign in to Khan G AI'}
               {authModalMode === 'signup' && 'Create your account'}
               {authModalMode === 'forgot' && 'Reset your password'}
             </h2>
@@ -195,14 +209,92 @@ export const AuthModal: React.FC = () => {
         )}
 
         {/* Form Body */}
-        <div className="p-6 space-y-4">
-          {/* Error Message banner */}
-          {error && (
+        <div className="p-6 space-y-4 overflow-y-auto">
+          {/* Unauthorized Domain Helper Card */}
+          {isUnauthorizedDomain ? (
+            <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-xl space-y-2.5 text-stone-800 text-xs animate-fade-in">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="font-semibold text-amber-900 text-xs">Domain Authorization Required for Google Sign-in</h4>
+                  <p className="text-[11px] text-amber-800 mt-0.5 leading-relaxed">
+                    Google OAuth requires adding your app preview domain to your Firebase Console settings.
+                  </p>
+                </div>
+              </div>
+
+              {/* Domain Copy Field */}
+              <div className="p-2 bg-white border border-amber-200 rounded-lg flex items-center justify-between gap-2 shadow-xs">
+                <div className="overflow-hidden min-w-0 flex-1">
+                  <span className="block text-[9px] text-stone-400 font-bold uppercase tracking-wider">Your App Domain</span>
+                  <code className="text-[11px] font-mono font-medium text-stone-800 truncate block select-all">
+                    {currentHostname}
+                  </code>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (navigator.clipboard) {
+                      navigator.clipboard.writeText(currentHostname);
+                      setCopiedDomain(true);
+                      setTimeout(() => setCopiedDomain(false), 2500);
+                    }
+                  }}
+                  className="px-2.5 py-1 bg-stone-100 hover:bg-stone-200 text-stone-700 font-medium rounded-md flex items-center gap-1.5 transition-colors shrink-0 text-[11px]"
+                  title="Copy domain to clipboard"
+                >
+                  {copiedDomain ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-600" />
+                      <span className="text-emerald-700 font-semibold">Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5 text-stone-600" />
+                      <span>Copy</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* 3 Step instructions */}
+              <div className="space-y-1 text-[11px] text-stone-700 bg-white/70 p-2.5 rounded-lg border border-amber-100">
+                <p className="font-semibold text-stone-900 mb-0.5">Quick 30-Second Fix:</p>
+                <p className="flex items-start gap-1.5">
+                  <span className="w-4 h-4 rounded-full bg-amber-200 text-amber-900 font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">1</span>
+                  <span>Click <strong>Open Firebase Settings</strong> below to access Authorized Domains.</span>
+                </p>
+                <p className="flex items-start gap-1.5">
+                  <span className="w-4 h-4 rounded-full bg-amber-200 text-amber-900 font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">2</span>
+                  <span>Click <strong>Add domain</strong> and paste the copied domain above.</span>
+                </p>
+                <p className="flex items-start gap-1.5">
+                  <span className="w-4 h-4 rounded-full bg-amber-200 text-amber-900 font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">3</span>
+                  <span>Click <strong>Done</strong>. Return here and click Google Sign-In again!</span>
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+                <a
+                  href={consoleSettingsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-medium text-[11px] transition-colors shadow-xs"
+                >
+                  <span>Open Firebase Settings</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+                <span className="text-[10px] text-stone-500 font-medium">
+                  Or use <strong>Email &amp; Password</strong> below (works instantly)!
+                </span>
+              </div>
+            </div>
+          ) : error ? (
             <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2.5 text-xs text-rose-800">
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
-          )}
+          ) : null}
 
           {/* Success Message banner */}
           {resetSuccessMessage && (

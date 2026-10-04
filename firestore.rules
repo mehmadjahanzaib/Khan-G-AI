@@ -16,7 +16,7 @@ service cloud.firestore {
     }
 
     function isValidId(id) {
-      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_-]+$');
     }
 
     function incoming() {
@@ -33,7 +33,11 @@ service cloud.firestore {
         incoming().email is string &&
         incoming().email.size() <= 320 &&
         (!('displayName' in incoming()) || (incoming().displayName is string && incoming().displayName.size() <= 100)) &&
-        (!('photoURL' in incoming()) || (incoming().photoURL is string && incoming().photoURL.size() <= 2048));
+        (!('photoURL' in incoming()) || (incoming().photoURL is string && incoming().photoURL.size() <= 2048)) &&
+        (!('referralCode' in incoming()) || (incoming().referralCode is string && incoming().referralCode.size() <= 32)) &&
+        (!('currentStreak' in incoming()) || (incoming().currentStreak is number && incoming().currentStreak >= 0)) &&
+        (!('lastActiveDate' in incoming()) || (incoming().lastActiveDate is string && incoming().lastActiveDate.size() <= 32)) &&
+        (!('bonusDaysEarned' in incoming()) || (incoming().bonusDaysEarned is number && incoming().bonusDaysEarned >= 0));
     }
 
     function isValidConversation(userId) {
@@ -81,6 +85,51 @@ service cloud.firestore {
           allow delete: if isOwner(userId) && isValidId(messageId);
         }
       }
+    }
+
+    // Public Shared Chats / Exported Notes
+    match /shared_chats/{shareId} {
+      allow get: if isValidId(shareId);
+      allow list: if false;
+      allow create: if isSignedIn() && isValidId(shareId) && incoming().creatorUid == request.auth.uid;
+      allow update, delete: if isSignedIn() && resource.data.creatorUid == request.auth.uid;
+    }
+
+    // Subscriptions Collection
+    match /subscriptions/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow list: if false;
+      // Allow user to write if setting their own free/trialing or pending record
+      allow create, update: if isOwner(userId) && isValidId(userId) &&
+        incoming().userId == userId &&
+        (incoming().planId in ['free', 'pro_student', 'pro_business']) &&
+        (incoming().status in ['active', 'trialing', 'past_due', 'cancelled', 'expired', 'inactive', 'pending']);
+      allow delete: if false;
+    }
+
+    // Usage Records Collection
+    match /usage_records/{recordId} {
+      allow get: if isSignedIn() && isValidId(recordId);
+      allow list: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(recordId) && incoming().userId == request.auth.uid;
+      allow delete: if false;
+    }
+
+    // Payment / Transaction Submissions
+    match /payments/{paymentId} {
+      allow get: if isSignedIn() && isValidId(paymentId) && (resource.data.userId == request.auth.uid);
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(paymentId) &&
+        incoming().userId == request.auth.uid &&
+        incoming().amount is number &&
+        incoming().amount >= 0 &&
+        incoming().status in ['pending', 'verified', 'rejected'];
+      allow update, delete: if false;
+    }
+
+    // Admin Audit Logs (Strict server/admin access only)
+    match /admin_audit_logs/{logId} {
+      allow read, write: if false;
     }
   }
 }

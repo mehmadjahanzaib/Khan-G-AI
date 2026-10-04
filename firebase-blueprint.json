@@ -15,7 +15,7 @@
     },
     "Conversation": {
       "title": "Chat Conversation",
-      "description": "User conversational session with Khan G Tools assistant",
+      "description": "User conversational session with Khan G AI assistant",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
@@ -42,6 +42,69 @@
         "isClarification": { "type": "boolean" }
       },
       "required": ["id", "conversationId", "sender", "text", "timestamp"]
+    },
+    "Subscription": {
+      "title": "User Subscription Record",
+      "description": "Persistent plan subscription details and expiration dates",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "planId": { "type": "string", "enum": ["free", "pro_student", "pro_business"] },
+        "status": { "type": "string", "enum": ["active", "trialing", "past_due", "cancelled", "expired", "inactive", "pending"] },
+        "provider": { "type": "string" },
+        "subscriptionId": { "type": "string" },
+        "currentPeriodStart": { "type": "number" },
+        "currentPeriodEnd": { "type": "number" },
+        "cancelAtPeriodEnd": { "type": "boolean" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["userId", "planId", "status"]
+    },
+    "UsageRecord": {
+      "title": "Daily Quota Usage Record",
+      "description": "Daily counts for AI chat messages and file transformations per user",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "dateStr": { "type": "string" },
+        "messagesCount": { "type": "number" },
+        "fileOpsCount": { "type": "number" },
+        "lastUpdated": { "type": "number" }
+      },
+      "required": ["userId", "dateStr"]
+    },
+    "Payment": {
+      "title": "Payment & Verification Record",
+      "description": "Manual or automated payment transaction records",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "amount": { "type": "number" },
+        "currency": { "type": "string" },
+        "provider": { "type": "string" },
+        "transactionId": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "verified", "rejected", "refunded"] },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["id", "userId", "amount", "status"]
+    },
+    "AdminAuditLog": {
+      "title": "Admin Audit Log",
+      "description": "Immutable audit trail of administrator actions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "action": { "type": "string" },
+        "adminId": { "type": "string" },
+        "targetId": { "type": "string" },
+        "details": { "type": "object" },
+        "timestamp": { "type": "number" },
+        "ip": { "type": "string" }
+      },
+      "required": ["id", "action", "timestamp"]
     }
   },
   "firestore": {
@@ -56,6 +119,22 @@
     "/users/{userId}/conversations/{conversationId}/messages/{messageId}": {
       "schema": "Message",
       "description": "Individual messages in a user's conversation"
+    },
+    "/subscriptions/{userId}": {
+      "schema": "Subscription",
+      "description": "User active subscription document"
+    },
+    "/usage_records/{recordId}": {
+      "schema": "UsageRecord",
+      "description": "Daily user usage quota counters"
+    },
+    "/payments/{paymentId}": {
+      "schema": "Payment",
+      "description": "Payment records and manual transaction submissions"
+    },
+    "/admin_audit_logs/{logId}": {
+      "schema": "AdminAuditLog",
+      "description": "Administrative audit records"
     }
   }
 }

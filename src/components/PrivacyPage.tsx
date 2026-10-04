@@ -18,7 +18,7 @@ export const PrivacyPage: React.FC<PrivacyPageProps> = ({ onBackToChat, maxFileS
             Privacy Policy & File Security
           </h1>
           <p className="text-xs sm:text-sm text-stone-500">
-            Khan G Tools: Built with strict privacy-by-design standards.
+            Khan G AI: Built with strict privacy-by-design standards.
           </p>
         </div>
       </div>
@@ -77,7 +77,7 @@ export const PrivacyPage: React.FC<PrivacyPageProps> = ({ onBackToChat, maxFileS
             <span>4. No Data Monetization or Permanent Profiles</span>
           </h2>
           <p className="text-xs text-stone-600">
-            Khan G Tools does not sell, track, or retain user behavioral dossiers. The AI models only receive metadata or text snippets necessary to infer your requested action; your raw file binaries are processed entirely locally by dedicated Node.js libraries.
+            Khan G AI does not sell, track, or retain user behavioral dossiers. The AI models only receive metadata or text snippets necessary to infer your requested action; your raw file binaries are processed entirely locally by dedicated Node.js libraries.
           </p>
         </div>
       </div>

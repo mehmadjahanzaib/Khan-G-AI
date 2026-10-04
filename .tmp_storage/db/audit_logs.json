@@ -1,0 +1,12 @@
+[
+  {
+    "id": "log_1790315196626_5117f7f0",
+    "action": "admin_login_failed",
+    "adminId": "anonymous",
+    "details": {
+      "reason": "invalid_key"
+    },
+    "timestamp": 1790315196626,
+    "ip": "127.0.0.1"
+  }
+]

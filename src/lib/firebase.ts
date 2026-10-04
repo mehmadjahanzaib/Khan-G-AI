@@ -98,6 +98,57 @@ export async function saveUserProfile(user: User) {
   }
 }
 
+/**
+ * Tracks daily activity and updates study streak (e.g. 🔥 3 day streak)
+ */
+export async function trackUserStreak(userId: string): Promise<{ currentStreak: number }> {
+  try {
+    const userRef = doc(db, 'users', userId);
+    const snap = await getDoc(userRef);
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    let currentStreak = 1;
+
+    if (snap.exists()) {
+      const data = snap.data();
+      const lastActive = data.lastActiveDate as string | undefined;
+
+      if (lastActive === today) {
+        return { currentStreak: data.currentStreak || 1 };
+      }
+
+      if (lastActive) {
+        const lastDate = new Date(lastActive);
+        const todayDate = new Date(today);
+        const diffDays = Math.round((todayDate.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
+
+        if (diffDays === 1) {
+          currentStreak = (data.currentStreak || 1) + 1;
+        } else {
+          currentStreak = 1;
+        }
+      }
+
+      await updateDoc(userRef, {
+        currentStreak,
+        lastActiveDate: today,
+        updatedAt: serverTimestamp(),
+      });
+    } else {
+      await setDoc(userRef, {
+        uid: userId,
+        currentStreak: 1,
+        lastActiveDate: today,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+    }
+
+    return { currentStreak };
+  } catch (err) {
+    console.warn('Error updating user streak:', err);
+    return { currentStreak: 1 };
+  }
+}
+
 // Conversation Management in Firestore
 export interface ConversationItem {
   id: string;
@@ -295,6 +346,63 @@ export async function clearConversationMessages(userId: string, conversationId: 
   } catch (err) {
     console.error('Error clearing conversation messages:', err);
     return false;
+  }
+}
+
+/**
+ * Cloud Export & Sharing: Persist a snapshot of a conversation to a public link
+ */
+export async function shareChatToCloud(
+  userId: string,
+  title: string,
+  messages: ChatMessage[]
+): Promise<{ shareId: string; url: string } | null> {
+  try {
+    const shareId = 'share-' + Date.now() + '-' + Math.random().toString(36).substring(2, 8);
+    const shareRef = doc(db, 'shared_chats', shareId);
+    await setDoc(shareRef, {
+      id: shareId,
+      creatorUid: userId,
+      title: title || 'Khan G AI Study & Chat Session',
+      messageCount: messages.length,
+      messages: messages.map((m) => ({
+        id: m.id,
+        sender: m.sender,
+        text: m.text,
+        timestamp: m.timestamp,
+        files: m.files
+          ? m.files.map((f) => ({
+              id: f.id,
+              originalName: f.originalName,
+              processedName: f.processedName,
+              mimeType: f.mimeType,
+              size: f.size,
+              downloadUrl: f.downloadUrl,
+            }))
+          : [],
+      })),
+      createdAt: serverTimestamp(),
+    });
+    const url = `${window.location.origin}?share=${shareId}`;
+    return { shareId, url };
+  } catch (err) {
+    console.error('Error sharing chat to cloud:', err);
+    return null;
+  }
+}
+
+/**
+ * Fetch a shared chat session from Firestore
+ */
+export async function fetchSharedChat(shareId: string): Promise<any | null> {
+  try {
+    const shareRef = doc(db, 'shared_chats', shareId);
+    const snap = await getDoc(shareRef);
+    if (!snap.exists()) return null;
+    return snap.data();
+  } catch (err) {
+    console.error('Error fetching shared chat:', err);
+    return null;
   }
 }
 

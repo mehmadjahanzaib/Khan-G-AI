@@ -1,0 +1,16 @@
+[
+  {
+    "userId": "127.0.0.1",
+    "dateStr": "2026-09-25",
+    "messagesCount": 3,
+    "fileOpsCount": 0,
+    "lastUpdated": 1790337194890
+  },
+  {
+    "userId": "127.0.0.1",
+    "dateStr": "2026-10-02",
+    "messagesCount": 6,
+    "fileOpsCount": 3,
+    "lastUpdated": 1790958274052
+  }
+]

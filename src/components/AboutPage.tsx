@@ -13,16 +13,23 @@ import {
   FileText, 
   FileSpreadsheet, 
   FileArchive, 
-  FileType 
+  FileType,
+  Mail,
+  MapPin,
+  Heart
 } from 'lucide-react';
+import { PakistanEmblem } from './PakistanEmblem.js';
+import { KhanGLogo, KhanGMark } from './BrandLogo.js';
 
 interface AboutPageProps {
   onBackToChat: () => void;
+  onOpenDeveloperModal?: () => void;
   maxFileSizeMB?: number;
 }
 
-export const AboutPage: React.FC<AboutPageProps> = ({ onBackToChat }) => {
+export const AboutPage: React.FC<AboutPageProps> = ({ onBackToChat, onOpenDeveloperModal }) => {
   const tools = [
+
     {
       icon: <ImageIcon className="w-5 h-5 text-indigo-600" />,
       title: 'Image Resize & Scaling',
@@ -153,63 +160,193 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onBackToChat }) => {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 sm:py-12">
-      {/* Hero Banner */}
-      <div className="bg-stone-900 text-white rounded-3xl p-6 sm:p-10 mb-10 shadow-lg relative overflow-hidden">
-        <div className="relative z-10">
-          <div className="inline-flex items-center gap-2 bg-amber-400/20 text-amber-300 px-3 py-1 rounded-full text-xs font-medium mb-4 border border-amber-400/30">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Architecture & Engine Specs</span>
+      {/* Hero Banner with Pakistani Flag Green and Official Brand Logo */}
+      <div className="bg-[#01411C] text-white rounded-3xl p-6 sm:p-10 mb-8 shadow-xl relative overflow-hidden ring-1 ring-emerald-600/30">
+        <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div className="max-w-2xl">
+            <div className="inline-flex items-center gap-2 bg-white/15 text-emerald-100 px-3 py-1 rounded-full text-xs font-semibold mb-4 border border-white/20">
+              <PakistanEmblem size={14} variant="flag" />
+              <span>Khan G AI • Architecture &amp; Engine Specs</span>
+            </div>
+            <div className="flex items-center gap-3 mb-3">
+              <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-white">
+                One Chat. Every File Tool.
+              </h1>
+              <div className="hidden sm:inline-flex p-2 rounded-2xl bg-white/10 text-white">
+                <PakistanEmblem size={28} variant="crescent-star" />
+              </div>
+            </div>
+            <p className="text-emerald-100/90 text-sm sm:text-base leading-relaxed mb-6">
+              Khan G AI combines conversational multi-provider intelligence with the raw speed and cryptographic privacy of 21+ dedicated Node.js native processing libraries.
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                onClick={onBackToChat}
+                className="inline-flex items-center gap-2 bg-white text-[#01411C] font-bold px-4 py-2.5 rounded-xl text-sm hover:bg-emerald-50 transition-colors shadow-xs"
+              >
+                <span>Open Chat Workspace</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+              {onOpenDeveloperModal && (
+                <button
+                  onClick={onOpenDeveloperModal}
+                  className="inline-flex items-center gap-2 bg-emerald-900/80 hover:bg-emerald-900 text-white font-semibold px-4 py-2.5 rounded-xl text-sm border border-emerald-500/40 transition-colors"
+                >
+                  <PakistanEmblem size={15} variant="circle" />
+                  <span>Meet Developer (MJ)</span>
+                </button>
+              )}
+            </div>
           </div>
-          <h1 className="text-2xl sm:text-4xl font-bold tracking-tight mb-3">
-            One Chat. Every File Tool.
-          </h1>
-          <p className="text-stone-300 text-sm sm:text-base max-w-2xl leading-relaxed mb-6">
-            Khan G Tools combines the conversational intelligence of state-of-the-art LLMs with the speed, precision, and security of dedicated Node.js native processing libraries.
-          </p>
-          <button
-            onClick={onBackToChat}
-            className="inline-flex items-center gap-2 bg-white text-stone-900 font-semibold px-4 py-2 rounded-xl text-sm hover:bg-stone-100 transition-colors"
-          >
-            <span>Open Chat Workspace</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
+
+          {/* Official Brand Identity Emblem Banner Badge */}
+          <div className="hidden md:flex flex-col items-center justify-center p-5 rounded-3xl bg-white/10 backdrop-blur-md border border-white/20 shrink-0 shadow-lg text-center">
+            <KhanGMark size={80} isSquircle={true} className="drop-shadow-md mb-2.5 hover:scale-105 transition-transform" />
+            <div className="text-sm font-black tracking-tight text-white">Khan G <span className="text-[#34D399]">AI</span></div>
+            <span className="text-[10px] text-emerald-200 uppercase tracking-widest font-mono font-medium mt-0.5">Official Brand Mark</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Developer Profile Card: Muhammad Jahanzaib (MJ) */}
+      <div className="bg-white dark:bg-stone-900 border-2 border-emerald-800/30 dark:border-emerald-800/50 rounded-3xl p-6 sm:p-8 mb-10 shadow-sm transition-colors">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div className="flex items-start sm:items-center gap-4">
+            <div className="relative shrink-0">
+              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-[#01411C] text-white font-black text-2xl sm:text-3xl flex items-center justify-center shadow-md">
+                MJ
+              </div>
+              <div className="absolute -bottom-1 -right-1">
+                <PakistanEmblem size={24} variant="circle" />
+              </div>
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-xl sm:text-2xl font-bold text-stone-900 dark:text-stone-100">
+                  Muhammad Jahanzaib
+                </h2>
+                <span className="px-2.5 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950 text-[#01411C] dark:text-emerald-300 font-bold text-xs border border-emerald-300 dark:border-emerald-700">
+                  MJ
+                </span>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300 text-xs font-semibold">
+                  <MapPin className="w-3 h-3 text-[#01411C]" />
+                  <span>Pakistan 🇵🇰</span>
+                </span>
+              </div>
+              <p className="text-xs sm:text-sm font-semibold text-emerald-800 dark:text-emerald-400 mt-1">
+                Founder, Creator &amp; Lead AI Software Engineer
+              </p>
+              <p className="text-xs text-stone-600 dark:text-stone-400 mt-1.5 max-w-xl leading-relaxed">
+                Conceived and engineered by Muhammad Jahanzaib (MJ) in Pakistan. Built to empower students (MDCAT, CSS, ECAT, Matric/FSc) and professionals with elite AI tutoring, speech voice input, and private zero-configuration file processing across 21+ tools.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row md:flex-col items-stretch sm:items-center md:items-end gap-2 w-full md:w-auto">
+            <a
+              href="mailto:mehmadjahanzaib@gmail.com"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-[#01411C] hover:bg-[#025625] text-white text-xs font-bold shadow-xs transition-colors"
+            >
+              <Mail className="w-3.5 h-3.5" />
+              <span>mehmadjahanzaib@gmail.com</span>
+            </a>
+            {onOpenDeveloperModal && (
+              <button
+                onClick={onOpenDeveloperModal}
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl border border-stone-300 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-800 text-stone-700 dark:text-stone-200 text-xs font-medium transition-colors"
+              >
+                <span>View Full Profile</span>
+                <ArrowRight className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Official Brand Identity Showcase */}
+      <div className="bg-white dark:bg-stone-900 border border-[#DCEBE5] dark:border-stone-800 rounded-3xl p-6 sm:p-8 mb-10 shadow-sm transition-colors">
+        <div className="flex items-center gap-2 mb-4">
+          <Sparkles className="w-5 h-5 text-[#00A86B]" />
+          <h2 className="text-lg sm:text-xl font-bold text-stone-900 dark:text-stone-100">
+            Official Brand Identity &amp; Logo System
+          </h2>
+        </div>
+        <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-400 mb-6 leading-relaxed">
+          The <strong>Khan G AI</strong> visual identity was crafted with intentional symbolism, harmonizing Pakistani cultural heritage, academic excellence, and modern computational intelligence.
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Tile 1: Standalone Vector Emblem */}
+          <div className="p-4 rounded-2xl bg-stone-50 dark:bg-stone-800/60 border border-stone-200/80 dark:border-stone-700/80 flex flex-col items-center text-center">
+            <div className="w-20 h-20 rounded-2xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 flex items-center justify-center shadow-xs mb-3">
+              <KhanGMark size={56} isSquircle={false} />
+            </div>
+            <h3 className="text-xs font-bold text-stone-900 dark:text-stone-100">The Emblem</h3>
+            <p className="text-[11px] text-stone-500 dark:text-stone-400 mt-1 leading-normal">
+              Fluid volumetric emerald ribbon forming the letter <strong>K</strong>, symbolizing continuous progress, vitality, and forward momentum.
+            </p>
+          </div>
+
+          {/* Tile 2: Origami Fountain Pen Nib */}
+          <div className="p-4 rounded-2xl bg-stone-50 dark:bg-stone-800/60 border border-stone-200/80 dark:border-stone-700/80 flex flex-col items-center text-center">
+            <div className="w-20 h-20 rounded-2xl bg-[#082A20] border border-emerald-500/30 flex items-center justify-center shadow-xs mb-3">
+              <KhanGMark size={56} isSquircle={false} />
+            </div>
+            <h3 className="text-xs font-bold text-stone-900 dark:text-stone-100">Origami Pen Nib</h3>
+            <p className="text-[11px] text-stone-500 dark:text-stone-400 mt-1 leading-normal">
+              A sculpted white calligraphy fountain pen nib nestled at the center, signifying scholarship, literacy, and rigorous exam preparation.
+            </p>
+          </div>
+
+          {/* Tile 3: Full Lockup & Typography */}
+          <div className="p-4 rounded-2xl bg-stone-50 dark:bg-stone-800/60 border border-stone-200/80 dark:border-stone-700/80 flex flex-col items-center text-center justify-between">
+            <div className="w-full flex-1 flex items-center justify-center py-2">
+              <KhanGLogo size="md" showTagline={true} />
+            </div>
+            <div>
+              <h3 className="text-xs font-bold text-stone-900 dark:text-stone-100">Official Signature Lockup</h3>
+              <p className="text-[11px] text-stone-500 dark:text-stone-400 mt-1 leading-normal">
+                High-contrast typography paired with national emerald accents (#004D3A, #00A86B, and #10B981).
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 
       {/* How It Works Flow */}
       <div className="mb-12">
-        <h2 className="text-xl font-bold text-stone-900 mb-6 flex items-center gap-2">
-          <Cpu className="w-5 h-5 text-stone-700" />
+        <h2 className="text-xl font-bold text-stone-900 dark:text-stone-100 mb-6 flex items-center gap-2">
+          <Cpu className="w-5 h-5 text-stone-700 dark:text-stone-300" />
           <span>The Core Architecture</span>
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-sm">
-            <div className="w-8 h-8 rounded-xl bg-stone-100 text-stone-800 font-bold flex items-center justify-center mb-3">
+          <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl p-5 shadow-sm">
+            <div className="w-8 h-8 rounded-xl bg-stone-100 dark:bg-stone-800 text-stone-800 dark:text-stone-200 font-bold flex items-center justify-center mb-3">
               1
             </div>
-            <h3 className="font-semibold text-stone-900 mb-1 text-sm">Upload & Instruction</h3>
-            <p className="text-xs text-stone-600 leading-relaxed">
-              You upload your file and type natural language instructions. No rigid forms or complex dropdown menus.
+            <h3 className="font-semibold text-stone-900 dark:text-stone-100 mb-1 text-sm">Exam Prep &amp; Voice Input</h3>
+            <p className="text-xs text-stone-600 dark:text-stone-400 leading-relaxed">
+              Ask any academic questions via voice or text, or drop study PDFs, Excel sheets, and images directly into chat.
             </p>
           </div>
 
-          <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-sm">
-            <div className="w-8 h-8 rounded-xl bg-stone-100 text-stone-800 font-bold flex items-center justify-center mb-3">
+          <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl p-5 shadow-sm">
+            <div className="w-8 h-8 rounded-xl bg-stone-100 dark:bg-stone-800 text-stone-800 dark:text-stone-200 font-bold flex items-center justify-center mb-3">
               2
             </div>
-            <h3 className="font-semibold text-stone-900 mb-1 text-sm">AI Intent & Tool Call</h3>
-            <p className="text-xs text-stone-600 leading-relaxed">
-              The LLM parses your intent and selects the exact tool and parameters via standard function calling. The AI never handles the raw binary data.
+            <h3 className="font-semibold text-stone-900 dark:text-stone-100 mb-1 text-sm">Ultra-Fast AI Engine</h3>
+            <p className="text-xs text-stone-600 dark:text-stone-400 leading-relaxed">
+              High-speed Groq LPU and Gemini models deliver instant explanations, derivations, and tool calls in sub-seconds.
             </p>
           </div>
 
-          <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-sm">
-            <div className="w-8 h-8 rounded-xl bg-stone-100 text-stone-800 font-bold flex items-center justify-center mb-3">
+          <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl p-5 shadow-sm">
+            <div className="w-8 h-8 rounded-xl bg-stone-100 dark:bg-stone-800 text-stone-800 dark:text-stone-200 font-bold flex items-center justify-center mb-3">
               3
             </div>
-            <h3 className="font-semibold text-stone-900 mb-1 text-sm">Native Node.js Execution</h3>
-            <p className="text-xs text-stone-600 leading-relaxed">
-              High-speed libraries like Sharp, PDF-Lib, and ExcelJS process your file locally on the server and return a secure download link.
+            <h3 className="font-semibold text-stone-900 dark:text-stone-100 mb-1 text-sm">In-Browser Preview &amp; Export</h3>
+            <p className="text-xs text-stone-600 dark:text-stone-400 leading-relaxed">
+              Preview documents and images directly in the browser, share with classmates via WhatsApp, or export seamlessly.
             </p>
           </div>
         </div>
@@ -253,7 +390,7 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onBackToChat }) => {
           <h2 className="text-lg font-bold text-stone-900">Multi-Provider AI Swapping</h2>
         </div>
         <p className="text-xs text-stone-600 mb-4 leading-relaxed">
-          Khan G Tools uses a unified <code className="bg-stone-200 px-1.5 py-0.5 rounded font-mono text-[11px]">lib/aiProvider.ts</code> abstraction. Switch your active provider anytime by setting <code className="bg-stone-200 px-1.5 py-0.5 rounded font-mono text-[11px]">AI_PROVIDER</code> in your environment variables:
+          Khan G AI uses a unified <code className="bg-stone-200 px-1.5 py-0.5 rounded font-mono text-[11px]">lib/aiProvider.ts</code> abstraction. Switch your active provider anytime by setting <code className="bg-stone-200 px-1.5 py-0.5 rounded font-mono text-[11px]">AI_PROVIDER</code> in your environment variables:
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
           <div className="bg-white p-3 rounded-xl border border-stone-200">
@@ -280,6 +417,14 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onBackToChat }) => {
             <span className="text-[10px] text-stone-600 font-mono">AI_PROVIDER=mistral | deepseek</span>
           </div>
         </div>
+      </div>
+
+      {/* Safety Disclaimer */}
+      <div className="text-center text-xs text-stone-500 pb-6 select-none">
+        <p>Khan G AI can make mistakes. Please double-check sensitive information.</p>
+        <p className="text-[11px] text-stone-400 mt-1">
+          Developed by Muhammad Jahanzaib (MJ) • Contact / Support: 0333-5016770
+        </p>
       </div>
     </div>
   );
