@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import OpenAI from 'openai';
 import { GoogleGenAI } from '@google/genai';
+import { STORAGE_ROOT } from './fileProcessor.js';
 
 export interface AudioTranscriptionResult {
   success: boolean;
@@ -28,7 +29,7 @@ export async function transcribeAudio(
       });
 
       // Write temp file for the OpenAI SDK file input
-      const tempPath = path.join(process.cwd(), '.tmp_storage', `audio_${Date.now()}_${filename}`);
+      const tempPath = path.join(STORAGE_ROOT, `audio_${Date.now()}_${filename}`);
       fs.writeFileSync(tempPath, fileBuffer);
 
       try {

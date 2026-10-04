@@ -259,6 +259,16 @@ export default function App() {
             }));
           formData.append('history', JSON.stringify(cleanHistory));
 
+          // Also append standardized 'messages' array for standard endpoint interoperability
+          const allMessages = [
+            ...cleanHistory.map((m) => ({
+              role: m.sender === 'user' ? 'user' : 'assistant',
+              content: m.text,
+            })),
+            { role: 'user', content: text },
+          ];
+          formData.append('messages', JSON.stringify(allMessages));
+
           files.forEach((file) => {
             formData.append('files', file);
           });

@@ -40,9 +40,11 @@ export async function extractPdfText(buffer: Buffer): Promise<{ text: string; nu
   return { text: '', numPages: 1 };
 }
 
-const STORAGE_ROOT = path.join(process.cwd(), '.tmp_storage');
-const UPLOADS_DIR = path.join(STORAGE_ROOT, 'uploads');
-const PROCESSED_DIR = path.join(STORAGE_ROOT, 'processed');
+import os from 'os';
+
+export const STORAGE_ROOT = process.env.STORAGE_DIR || (process.env.VERCEL ? path.join(os.tmpdir(), '.tmp_storage') : path.join(process.cwd(), '.tmp_storage'));
+export const UPLOADS_DIR = path.join(STORAGE_ROOT, 'uploads');
+export const PROCESSED_DIR = path.join(STORAGE_ROOT, 'processed');
 
 // Ensure directories exist
 for (const dir of [STORAGE_ROOT, UPLOADS_DIR, PROCESSED_DIR]) {

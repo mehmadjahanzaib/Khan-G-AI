@@ -64,7 +64,12 @@ export interface AdminAuditLog {
 }
 
 // Directory for persistent storage
-const DB_DIR = path.resolve(process.cwd(), '.tmp_storage', 'db');
+import os from 'os';
+const DB_DIR = process.env.STORAGE_DIR
+  ? path.resolve(process.env.STORAGE_DIR, 'db')
+  : process.env.VERCEL
+  ? path.resolve(os.tmpdir(), '.tmp_storage', 'db')
+  : path.resolve(process.cwd(), '.tmp_storage', 'db');
 if (!fs.existsSync(DB_DIR)) {
   fs.mkdirSync(DB_DIR, { recursive: true });
 }

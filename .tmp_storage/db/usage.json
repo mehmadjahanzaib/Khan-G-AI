@@ -12,5 +12,12 @@
     "messagesCount": 6,
     "fileOpsCount": 3,
     "lastUpdated": 1790958274052
+  },
+  {
+    "userId": "127.0.0.1",
+    "dateStr": "2026-10-04",
+    "messagesCount": 2,
+    "fileOpsCount": 0,
+    "lastUpdated": 1791081453504
   }
 ]
